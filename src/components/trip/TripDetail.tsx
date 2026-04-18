@@ -612,7 +612,7 @@ export function TripDetail() {
                     Total Trip Spend
                   </p>
                   <p className="mt-1 text-4xl font-semibold tabular-nums text-slate-900">
-                    ${totalSpent(expenses).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₹{totalSpent(expenses).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
                 <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800 ring-1 ring-emerald-100">
@@ -645,7 +645,7 @@ export function TripDetail() {
                           : bal < 0
                             ? "−"
                             : ""}
-                        $
+                        ₹
                         {Math.abs(bal).toLocaleString(undefined, {
                           minimumFractionDigits: 2,
                           maximumFractionDigits: 2,

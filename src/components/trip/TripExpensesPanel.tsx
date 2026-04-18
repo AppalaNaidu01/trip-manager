@@ -180,7 +180,7 @@ export function TripExpensesPanel({
           <div>
             <p className="text-xs font-medium text-slate-500">Total Trip Spend</p>
             <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-[#14532d]">
-              ${money(total)}
+              ₹{money(total)}
             </p>
           </div>
           <div className="flex h-16 w-24 items-center justify-center rounded-xl bg-slate-100/90 text-slate-300">
@@ -205,7 +205,7 @@ export function TripExpensesPanel({
             </p>
             {hero.youOwe ? (
               <p className="mt-2 text-sm font-semibold leading-snug text-emerald-950">
-                <span className="text-lg tabular-nums">${money(hero.youOwe.total)}</span>
+                <span className="text-lg tabular-nums">₹{money(hero.youOwe.total)}</span>
                 <span className="mt-1 block text-xs font-medium text-emerald-900/90">
                   To {formatCounterpartyNames(hero.youOwe.counterparties)}
                 </span>
@@ -232,7 +232,7 @@ export function TripExpensesPanel({
             </p>
             {hero.owedToYou ? (
               <p className="mt-2 text-sm font-semibold leading-snug text-white">
-                <span className="text-lg tabular-nums">${money(hero.owedToYou.total)}</span>
+                <span className="text-lg tabular-nums">₹{money(hero.owedToYou.total)}</span>
                 <span className="mt-1 block text-xs font-medium text-emerald-100/95">
                   From {formatCounterpartyNames(hero.owedToYou.counterparties)}
                 </span>
@@ -253,7 +253,7 @@ export function TripExpensesPanel({
             <label className="flex flex-col gap-2">
               <span className="text-xs font-medium text-slate-600">Amount</span>
               <div className="flex rounded-xl border border-slate-200 bg-white ring-1 ring-black/[0.04] focus-within:ring-2 focus-within:ring-emerald-800/25">
-                <span className="flex items-center pl-3 text-slate-500">$</span>
+                <span className="flex items-center pl-3 text-slate-500">₹</span>
                 <input
                   inputMode="decimal"
                   value={amount}
@@ -392,7 +392,7 @@ export function TripExpensesPanel({
                   </div>
                   <div className="flex shrink-0 flex-col items-end justify-between">
                     <span className="text-sm font-semibold tabular-nums text-[#0f172a]">
-                      ${money(ex.amount)}
+                      ₹{money(ex.amount)}
                     </span>
                     {!closed ? (
                       <button
@@ -442,7 +442,7 @@ export function TripExpensesPanel({
                     row.positive ? "text-emerald-700" : "text-[#9a3412]"
                   }`}
                 >
-                  {row.positive ? "+" : "−"}${money(row.amount)}
+                  {row.positive ? "+" : "−"}₹{money(row.amount)}
                 </span>
               </li>
             ))
