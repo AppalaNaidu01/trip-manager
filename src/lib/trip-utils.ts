@@ -1,5 +1,65 @@
 import type { Timestamp } from "firebase/firestore";
-import type { Expense, Trip } from "@/types/models";
+import type { Expense, Trip, TripMember } from "@/types/models";
+
+/** Uppercase pill for hero, e.g. "DEC 12 — DEC 25, 2023" */
+export function formatTripDateHeroPill(
+  trip: Pick<Trip, "startDate" | "endDate">,
+): string {
+  const s = trip.startDate?.slice(0, 10);
+  const e = trip.endDate?.slice(0, 10) || s;
+  if (!s) return "";
+  const short = (iso: string) => {
+    const d = new Date(`${iso}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return "";
+    return d
+      .toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      .toUpperCase();
+  };
+  const long = (iso: string) => {
+    const d = new Date(`${iso}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return "";
+    return d
+      .toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+      .toUpperCase();
+  };
+  if (e && e !== s) return `${short(s)} — ${long(e)}`;
+  return long(s);
+}
+
+/** Short initials from display name (max 2 chars) */
+export function memberInitials(name: string): string {
+  const p = name.trim().split(/\s+/).filter(Boolean);
+  if (p.length === 0) return "?";
+  if (p.length === 1) return p[0]!.slice(0, 2).toUpperCase();
+  return `${p[0]![0] ?? ""}${p[1]![0] ?? ""}`.toUpperCase();
+}
+
+/** One-line balance narrative for overview cards */
+export function balanceNarrative(
+  uid: string,
+  members: Pick<TripMember, "userId" | "name">[],
+  balances: Record<string, number>,
+): string {
+  const b = balances[uid] ?? 0;
+  const pos = members.filter((m) => (balances[m.userId] ?? 0) > 0.005);
+  const neg = members.filter((m) => (balances[m.userId] ?? 0) < -0.005);
+  if (b > 0.005) {
+    if (neg.length >= 1) return "is owed by everyone";
+    return "Group credit";
+  }
+  if (b < -0.005) {
+    const creditor = [...pos].sort(
+      (a, x) => (balances[x.userId] ?? 0) - (balances[a.userId] ?? 0),
+    )[0];
+    if (creditor) return `Owes ${creditor.name}`;
+    return "Owes the group";
+  }
+  return "Settled up";
+}
 
 /** Human-readable date range for trip headers and cards */
 export function formatTripDateRange(trip: Pick<Trip, "startDate" | "endDate">): string {
@@ -149,4 +209,99 @@ export function generateInviteToken(): string {
     for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
   }
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+const ROUND_MONEY = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Greedy pairwise settlements that zero net balances (same sum as group nets).
+ */
+export function suggestedSettlements(
+  memberIds: string[],
+  balances: Record<string, number>,
+): { from: string; to: string; amount: number }[] {
+  const EPS = 0.005;
+  const bal: Record<string, number> = {};
+  for (const id of memberIds) {
+    bal[id] = balances[id] ?? 0;
+  }
+  const out: { from: string; to: string; amount: number }[] = [];
+  for (;;) {
+    let debtor: string | null = null;
+    let creditor: string | null = null;
+    let minB = 0;
+    let maxB = 0;
+    for (const id of memberIds) {
+      const b = bal[id] ?? 0;
+      if (b < minB - EPS) {
+        minB = b;
+        debtor = id;
+      }
+      if (b > maxB + EPS) {
+        maxB = b;
+        creditor = id;
+      }
+    }
+    if (!debtor || !creditor || minB >= -EPS || maxB <= EPS) break;
+    const pay = Math.min(-bal[debtor]!, bal[creditor]!);
+    if (pay <= EPS) break;
+    const rounded = ROUND_MONEY(pay);
+    out.push({ from: debtor, to: creditor, amount: rounded });
+    bal[debtor] = ROUND_MONEY((bal[debtor] ?? 0) + rounded);
+    bal[creditor] = ROUND_MONEY((bal[creditor] ?? 0) - rounded);
+  }
+  return out;
+}
+
+export function transfersForUser(
+  uid: string,
+  transfers: { from: string; to: string; amount: number }[],
+): { from: string; to: string; amount: number }[] {
+  return transfers.filter((t) => t.from === uid || t.to === uid);
+}
+
+/** Labels for hero cards: who you pay / who pays you (from suggested transfers). */
+export function expenseHeroSummaries(
+  uid: string,
+  transfers: { from: string; to: string; amount: number }[],
+  nameOf: (id: string) => string,
+): {
+  youOwe: { total: number; counterparties: string[] } | null;
+  owedToYou: { total: number; counterparties: string[] } | null;
+} {
+  let oweTotal = 0;
+  const oweTo = new Map<string, number>();
+  let owedTotal = 0;
+  const owedFrom = new Map<string, number>();
+  for (const t of transfers) {
+    if (t.from === uid) {
+      oweTotal += t.amount;
+      oweTo.set(t.to, (oweTo.get(t.to) ?? 0) + t.amount);
+    }
+    if (t.to === uid) {
+      owedTotal += t.amount;
+      owedFrom.set(t.from, (owedFrom.get(t.from) ?? 0) + t.amount);
+    }
+  }
+  const fmt = (m: Map<string, number>) =>
+    [...m.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([id]) => nameOf(id));
+  return {
+    youOwe:
+      oweTotal > 0.005
+        ? { total: ROUND_MONEY(oweTotal), counterparties: fmt(oweTo) }
+        : null,
+    owedToYou:
+      owedTotal > 0.005
+        ? { total: ROUND_MONEY(owedTotal), counterparties: fmt(owedFrom) }
+        : null,
+  };
+}
+
+export function formatCounterpartyNames(names: string[]): string {
+  if (names.length === 0) return "";
+  if (names.length === 1) return names[0]!;
+  if (names.length === 2) return `${names[0]!} & ${names[1]!}`;
+  return `${names.slice(0, -1).join(", ")} & ${names.at(-1)!}`;
 }

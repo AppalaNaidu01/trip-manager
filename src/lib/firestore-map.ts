@@ -150,6 +150,10 @@ export function mapTripRoute(
     stops,
     distanceText: String(data.distanceText ?? ""),
     durationText: String(data.durationText ?? ""),
+    avgSpeedText:
+      data.avgSpeedText != null && String(data.avgSpeedText).length > 0
+        ? String(data.avgSpeedText)
+        : undefined,
     routeNotes: String(data.routeNotes ?? ""),
     createdBy: String(data.createdBy ?? ""),
     createdAt: data.createdAt,
@@ -166,11 +170,19 @@ export function mapChecklistItem(
     id,
     tripId,
     text: String(data.text ?? ""),
+    notes:
+      data.notes != null && String(data.notes).length > 0
+        ? String(data.notes)
+        : null,
     category: String(data.category ?? "Other"),
     isCompleted: data.isCompleted === true,
     assignedTo:
       data.assignedTo != null && String(data.assignedTo).length > 0
         ? String(data.assignedTo)
+        : null,
+    completedBy:
+      data.completedBy != null && String(data.completedBy).length > 0
+        ? String(data.completedBy)
         : null,
     createdBy: String(data.createdBy ?? ""),
     completedAt: data.completedAt ?? null,

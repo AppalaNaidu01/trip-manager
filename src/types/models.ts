@@ -42,6 +42,8 @@ export interface TripRoute {
   stops: RouteStop[];
   distanceText: string;
   durationText: string;
+  /** Optional display text, e.g. "42 km/h" */
+  avgSpeedText?: string;
   routeNotes: string;
   createdBy: string;
   createdAt: Timestamp;
@@ -64,9 +66,13 @@ export interface ChecklistItem {
   id: string;
   tripId: string;
   text: string;
+  /** Optional detail line (e.g. brand, size). */
+  notes?: string | null;
   category: string;
   isCompleted: boolean;
   assignedTo: string | null;
+  /** Set when marked complete (for “Completed by …”). */
+  completedBy?: string | null;
   createdBy: string;
   completedAt: Timestamp | null;
   createdAt: Timestamp;

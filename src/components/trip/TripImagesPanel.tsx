@@ -14,6 +14,23 @@ import { useMemo, useState } from "react";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
+function ImageIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      aria-hidden
+    >
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="m21 15-5-5L5 21" />
+    </svg>
+  );
+}
+
 export function TripImagesPanel({
   tripId,
   trip,
@@ -26,17 +43,12 @@ export function TripImagesPanel({
   members: TripMember[];
 }) {
   const [coverBusy, setCoverBusy] = useState(false);
-  const [bgBusy, setBgBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const closed = trip.closed === true;
 
   const coverSrc = tripImageSrcForUi(
     trip.coverDriveFileId,
     trip.coverImageUrl,
-  );
-  const backgroundSrc = tripImageSrcForUi(
-    trip.backgroundDriveFileId,
-    trip.backgroundImageUrl,
   );
 
   const memberEmails = useMemo(
@@ -47,11 +59,7 @@ export function TripImagesPanel({
     [members],
   );
 
-  async function upload(
-    file: File,
-    kind: "cover" | "background",
-    setBusy: (v: boolean) => void,
-  ) {
+  async function uploadCover(file: File) {
     if (!user || closed) return;
     if (!file.type.startsWith("image/")) {
       setErr("Please choose an image file.");
@@ -62,50 +70,40 @@ export function TripImagesPanel({
       return;
     }
     setErr(null);
-    setBusy(true);
+    setCoverBusy(true);
     try {
-      const prefix = kind === "cover" ? "cover" : "background";
       const { url, driveFileId } = await uploadTripImageToDrive({
         trip,
         tripId,
         file,
-        nameHint: `${prefix}_${Date.now()}_${file.name}`,
+        nameHint: `cover_${Date.now()}_${file.name}`,
         memberEmails,
       });
       const db = getDb();
-      const field = kind === "cover" ? "coverImageUrl" : "backgroundImageUrl";
-      const idField =
-        kind === "cover" ? "coverDriveFileId" : "backgroundDriveFileId";
       await updateDoc(doc(db, "trips", tripId), {
-        [field]: url,
-        [idField]: driveFileId,
+        coverImageUrl: url,
+        coverDriveFileId: driveFileId,
         updatedAt: serverTimestamp(),
       });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Upload failed");
     } finally {
-      setBusy(false);
+      setCoverBusy(false);
     }
   }
 
-  async function clearField(field: "coverImageUrl" | "backgroundImageUrl") {
+  async function clearCover() {
     if (!user || closed) return;
     setErr(null);
     try {
-      const idField =
-        field === "coverImageUrl" ? "coverDriveFileId" : "backgroundDriveFileId";
-      const fileId =
-        field === "coverImageUrl"
-          ? trip.coverDriveFileId
-          : trip.backgroundDriveFileId;
-      if (fileId) {
+      if (trip.coverDriveFileId) {
         const token = await getGoogleDriveAccessToken();
-        await deleteDriveFile(token, fileId);
+        await deleteDriveFile(token, trip.coverDriveFileId);
       }
       const db = getDb();
       await updateDoc(doc(db, "trips", tripId), {
-        [field]: null,
-        [idField]: null,
+        coverImageUrl: null,
+        coverDriveFileId: null,
         updatedAt: serverTimestamp(),
       });
     } catch (e) {
@@ -114,103 +112,63 @@ export function TripImagesPanel({
   }
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white/95 p-5 ring-1 ring-black/5">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+    <section>
+      <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-900">
         Trip look
       </h2>
-      <p className="mt-2 text-sm text-slate-600">
-        Cover appears on cards and the trip header. Background styles the trip
-        dashboard. Images are stored in your Google Drive (trip folder).
+      <p className="mt-2 text-xs leading-relaxed text-slate-500">
+        Cover is stored in your Google Drive trip folder.
       </p>
       {err ? (
         <p className="mt-2 text-sm text-red-600" role="alert">
           {err}
         </p>
       ) : null}
-      <div className="mt-4 grid gap-6 sm:grid-cols-2">
-        <div>
-          <p className="text-xs font-medium text-slate-600">Cover image</p>
-          <div className="mt-2 aspect-[16/9] overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-br from-emerald-100 to-slate-200">
-            {coverSrc ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={coverSrc}
-                alt=""
-                referrerPolicy="no-referrer"
-                className="h-full w-full object-cover"
-              />
-            ) : null}
+
+      <label className="group relative mt-5 block aspect-[16/10] cursor-pointer overflow-hidden rounded-2xl ring-1 ring-slate-200/90">
+        <input
+          type="file"
+          accept="image/*"
+          className="hidden"
+          disabled={closed || !user || coverBusy}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) void uploadCover(f);
+          }}
+        />
+        {coverSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={coverSrc}
+            alt=""
+            referrerPolicy="no-referrer"
+            className="h-full w-full object-cover blur-[2px] brightness-90 transition group-hover:blur-none group-hover:brightness-100"
+          />
+        ) : (
+          <div className="flex h-full min-h-[140px] w-full flex-col items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
+            <ImageIcon className="h-10 w-10 text-slate-400" />
           </div>
-          {!closed && user ? (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <label className="cursor-pointer rounded-lg border border-dashed border-slate-300/80 bg-white/80 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  disabled={coverBusy}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    e.target.value = "";
-                    if (f) void upload(f, "cover", setCoverBusy);
-                  }}
-                />
-                {coverBusy ? "Uploading…" : "Upload / replace"}
-              </label>
-              {coverSrc ? (
-                <button
-                  type="button"
-                  onClick={() => clearField("coverImageUrl")}
-                  className="text-xs text-red-600 hover:underline"
-                >
-                  Remove
-                </button>
-              ) : null}
-            </div>
-          ) : null}
+        )}
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/35 p-2 text-center transition group-hover:bg-black/25">
+          <ImageIcon className="h-7 w-7 text-white drop-shadow" />
+          <span className="text-[10px] font-bold uppercase tracking-wider text-white drop-shadow">
+            {coverBusy ? "…" : "Edit cover"}
+          </span>
         </div>
-        <div>
-          <p className="text-xs font-medium text-slate-600">Background image</p>
-          <div className="mt-2 aspect-video overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-br from-emerald-50/80 to-slate-200">
-            {backgroundSrc ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={backgroundSrc}
-                alt=""
-                referrerPolicy="no-referrer"
-                className="h-full w-full object-cover opacity-90"
-              />
-            ) : null}
-          </div>
-          {!closed && user ? (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <label className="cursor-pointer rounded-lg border border-dashed border-slate-300/80 bg-white/80 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  disabled={bgBusy}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    e.target.value = "";
-                    if (f) void upload(f, "background", setBgBusy);
-                  }}
-                />
-                {bgBusy ? "Uploading…" : "Upload / replace"}
-              </label>
-              {backgroundSrc ? (
-                <button
-                  type="button"
-                  onClick={() => clearField("backgroundImageUrl")}
-                  className="text-xs text-red-600 hover:underline"
-                >
-                  Remove
-                </button>
-              ) : null}
-            </div>
-          ) : null}
+      </label>
+
+      {!closed && user && coverSrc ? (
+        <div className="mt-3 flex justify-center">
+          <button
+            type="button"
+            onClick={() => clearCover()}
+            className="text-[11px] font-medium text-red-600 hover:underline"
+          >
+            Remove cover
+          </button>
         </div>
-      </div>
+      ) : null}
     </section>
   );
 }

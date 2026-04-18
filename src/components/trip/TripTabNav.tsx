@@ -25,19 +25,22 @@ export function TripTabNav({
   onChange: (id: TripTabId) => void;
 }) {
   return (
-    <div className="scrollbar-hide -mx-4 flex gap-1 overflow-x-auto border-b border-slate-300/80 px-4 pb-px sm:mx-0 sm:px-0">
+    <div className="scrollbar-hide -mx-1 flex gap-5 overflow-x-auto border-b border-slate-200/90 pb-0">
       {TABS.map((t) => (
         <button
           key={t.id}
           type="button"
           onClick={() => onChange(t.id)}
-          className={`shrink-0 rounded-t-lg px-3 py-2 text-sm font-medium transition-colors ${
+          className={`relative shrink-0 pb-3 text-sm font-semibold transition ${
             active === t.id
-              ? "bg-white/95 font-semibold text-emerald-800 ring-1 ring-slate-300/80"
-              : "text-slate-600 hover:bg-white/60 hover:text-[#0f172a]"
+              ? "text-[#14532d]"
+              : "text-slate-500 hover:text-slate-800"
           }`}
         >
           {t.label}
+          {active === t.id ? (
+            <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-[#14532d]" />
+          ) : null}
         </button>
       ))}
     </div>

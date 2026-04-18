@@ -1,5 +1,6 @@
 "use client";
 
+import { useTripChrome } from "@/contexts/TripChromeContext";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   mapExpense,
@@ -9,17 +10,30 @@ import {
   mapTrip,
 } from "@/lib/firestore-map";
 import { getDb } from "@/lib/firebase/client";
-import { computeBalances, formatTripDateRange, totalSpent } from "@/lib/trip-utils";
-import type { Expense, MediaItem, TimelineEvent, Trip, TripMember } from "@/types/models";
+import {
+  balanceNarrative,
+  computeBalances,
+  formatTripDateHeroPill,
+  memberInitials,
+  totalSpent,
+} from "@/lib/trip-utils";
+import type {
+  Expense,
+  MediaItem,
+  TimelineEvent,
+  Trip,
+  TripMember,
+} from "@/types/models";
 import {
   collection,
   doc,
+  limit,
   onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
   updateDoc,
   writeBatch,
-  serverTimestamp,
-  query,
-  orderBy,
 } from "firebase/firestore";
 import {
   deleteDriveFile,
@@ -33,10 +47,14 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { TripChecklistPanel } from "./TripChecklistPanel";
+import { TripExpensesPanel } from "./TripExpensesPanel";
+import { TripMembersPanel } from "./TripMembersPanel";
 import { TripImagesPanel } from "./TripImagesPanel";
+import { TripPhotosPanel } from "./TripPhotosPanel";
 import { TripRoutePanel } from "./TripRoutePanel";
 import { TripTabNav, type TripTabId } from "./TripTabNav";
 
@@ -44,6 +62,7 @@ export function TripDetail() {
   const params = useParams();
   const tripId = params.tripId as string;
   const { user } = useAuth();
+  const { setChrome } = useTripChrome();
   const [tab, setTab] = useState<TripTabId>("overview");
 
   const [trip, setTrip] = useState<Trip | null>(null);
@@ -56,7 +75,7 @@ export function TripDetail() {
   const [amount, setAmount] = useState("");
   const [paidBy, setPaidBy] = useState("");
   const [splitIds, setSplitIds] = useState<string[]>([]);
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState("Dining");
   const [expenseSaving, setExpenseSaving] = useState(false);
   const [expenseErr, setExpenseErr] = useState<string | null>(null);
 
@@ -64,6 +83,32 @@ export function TripDetail() {
   const [uploadErr, setUploadErr] = useState<string | null>(null);
 
   const [copied, setCopied] = useState(false);
+  const [tripBroadcast, setTripBroadcast] = useState<{
+    kind: "checklist" | "members";
+    fromUid: string;
+  } | null>(null);
+  const broadcastSkipRef = useRef({ checklist: true, members: true });
+
+  const photoFileInputRef = useRef<HTMLInputElement>(null);
+  const triggerPhotoUpload = useCallback(() => {
+    photoFileInputRef.current?.click();
+  }, []);
+
+  const inviteUrl = useMemo(() => {
+    if (typeof window === "undefined" || !trip) return "";
+    return `${window.location.origin}/join/${trip.inviteToken}`;
+  }, [trip]);
+
+  const copyInvite = useCallback(async () => {
+    if (!inviteUrl) return;
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  }, [inviteUrl]);
 
   useEffect(() => {
     if (!tripId) return;
@@ -135,11 +180,78 @@ export function TripDetail() {
     return () => unsub();
   }, [tripId, trip]);
 
-  const displayPaidBy =
-    paidBy || user?.uid || members[0]?.userId || "";
+  useEffect(() => {
+    if (!tripId || !user) return;
+    broadcastSkipRef.current.checklist = true;
+    const db = getDb();
+    const q = query(
+      collection(db, "trips", tripId, "checklistReminders"),
+      orderBy("createdAt", "desc"),
+      limit(40),
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      if (broadcastSkipRef.current.checklist) {
+        broadcastSkipRef.current.checklist = false;
+        return;
+      }
+      for (const ch of snap.docChanges()) {
+        if (ch.type !== "added") continue;
+        const from = ch.doc.data().createdBy as string | undefined;
+        if (from && from !== user.uid) {
+          setTripBroadcast({ kind: "checklist", fromUid: from });
+          break;
+        }
+      }
+    });
+    return () => unsub();
+  }, [tripId, user]);
 
-  const activeSplitIds =
-    splitIds.length > 0 ? splitIds : members.map((m) => m.userId);
+  useEffect(() => {
+    if (!tripId || !user) return;
+    broadcastSkipRef.current.members = true;
+    const db = getDb();
+    const q = query(
+      collection(db, "trips", tripId, "memberReminders"),
+      orderBy("createdAt", "desc"),
+      limit(40),
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      if (broadcastSkipRef.current.members) {
+        broadcastSkipRef.current.members = false;
+        return;
+      }
+      for (const ch of snap.docChanges()) {
+        if (ch.type !== "added") continue;
+        const from = ch.doc.data().createdBy as string | undefined;
+        if (from && from !== user.uid) {
+          setTripBroadcast({ kind: "members", fromUid: from });
+          break;
+        }
+      }
+    });
+    return () => unsub();
+  }, [tripId, user]);
+
+  useEffect(() => {
+    if (!trip) {
+      setChrome(null);
+      return;
+    }
+    const subtitle = formatTripDateHeroPill(trip);
+    setChrome({
+      title: tab === "members" ? "Trip Members" : trip.name,
+      subtitle: tab === "members" ? "" : subtitle || "",
+      headerRight:
+        tab === "photos" && user
+          ? "camera"
+          : tab === "members" && user
+            ? "invitePeople"
+            : "menu",
+      onCamera: triggerPhotoUpload,
+      onInvitePeople: copyInvite,
+    });
+    return () => setChrome(null);
+  }, [trip, tab, user, setChrome, triggerPhotoUpload, copyInvite]);
 
   const balances = useMemo(() => {
     if (!trip) return {};
@@ -152,22 +264,6 @@ export function TripDetail() {
       })),
     );
   }, [trip, expenses]);
-
-  const inviteUrl = useMemo(() => {
-    if (typeof window === "undefined" || !trip) return "";
-    return `${window.location.origin}/join/${trip.inviteToken}`;
-  }, [trip]);
-
-  const copyInvite = useCallback(async () => {
-    if (!inviteUrl) return;
-    try {
-      await navigator.clipboard.writeText(inviteUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-  }, [inviteUrl]);
 
   const isAdmin = user && trip && user.uid === trip.createdBy;
 
@@ -204,7 +300,7 @@ export function TripDetail() {
         amount: n,
         paidBy: payer,
         splitBetween: splits,
-        ...(category.trim() ? { category: category.trim() } : {}),
+        category: category.trim() || "Other",
         createdAt: serverTimestamp(),
       });
       batch.set(tlRef, {
@@ -214,7 +310,7 @@ export function TripDetail() {
       });
       await batch.commit();
       setAmount("");
-      setCategory("");
+      setCategory("Dining");
     } catch (err) {
       console.error(err);
       setExpenseErr(err instanceof Error ? err.message : "Could not add expense");
@@ -350,40 +446,25 @@ export function TripDetail() {
   );
   const hasCover = Boolean(coverSrc);
 
-  const backgroundSrc = tripImageSrcForUi(
-    trip.backgroundDriveFileId,
-    trip.backgroundImageUrl,
-  );
-
   return (
     <div className="relative flex flex-col gap-6 overflow-hidden rounded-2xl sm:gap-8">
-      {backgroundSrc ? (
-        <>
-          <img
-            aria-hidden
-            src={backgroundSrc}
-            alt=""
-            referrerPolicy="no-referrer"
-            className="pointer-events-none absolute inset-0 z-0 min-h-full w-full object-cover"
-          />
-          <div
-            className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-b from-white/[0.88] to-white/[0.92]"
-            aria-hidden
-          />
-        </>
-      ) : null}
       <div className="relative z-10 flex flex-col gap-6 sm:gap-8">
-      <div>
-        <Link
-          href="/dashboard"
-          className="text-sm text-slate-500 hover:text-slate-800"
-        >
-          ← Trips
-        </Link>
-
         <div
-          className={`relative mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-emerald-50 to-teal-50 ring-1 ring-black/5 ${
-            hasCover ? "min-h-[140px] sm:min-h-[180px]" : "min-h-0"
+          className={`relative mt-1 overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-sm ring-1 ring-black/5 ${
+            (tab === "photos" ||
+              tab === "route" ||
+              tab === "checklist" ||
+              tab === "members") &&
+              hasCover
+              ? "min-h-[240px] sm:min-h-[300px]"
+              : hasCover
+                ? "min-h-[220px] sm:min-h-[280px]"
+                : tab === "photos" ||
+                    tab === "route" ||
+                    tab === "checklist" ||
+                    tab === "members"
+                  ? "min-h-[200px] sm:min-h-[240px]"
+                  : "min-h-[160px]"
           }`}
         >
           {hasCover && coverSrc ? (
@@ -395,31 +476,75 @@ export function TripDetail() {
               className="absolute inset-0 h-full w-full object-cover"
             />
           ) : null}
+          {hasCover && coverSrc ? (
+            <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-black/10" />
+          ) : null}
           <div
-            className={`relative p-4 sm:p-6 ${
-              hasCover
-                ? "bg-black/45 text-white"
-                : "text-[#0f172a]"
+            className={`relative flex min-h-[inherit] flex-col justify-end p-5 sm:p-7 ${
+              hasCover ? "text-white" : "text-[#0f172a]"
             }`}
           >
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight">
+            {tab === "photos" ||
+            tab === "route" ||
+            tab === "checklist" ||
+            tab === "members" ? (
+              <>
+                <h1
+                  className={`text-3xl font-bold leading-tight tracking-tight sm:text-[2rem] ${
+                    hasCover && coverSrc ? "text-white drop-shadow-md" : ""
+                  }`}
+                >
                   {trip.name}
                 </h1>
-                <p className="mt-1 text-sm opacity-90">
-                  {formatTripDateRange(trip)}
-                </p>
+                {formatTripDateHeroPill(trip) ? (
+                  <p
+                    className={`mt-3 inline-flex items-center gap-2 text-sm font-medium ${
+                      hasCover && coverSrc ? "text-white/95 drop-shadow" : "text-slate-600"
+                    }`}
+                  >
+                    <CalendarMiniIcon
+                      className={
+                        hasCover && coverSrc ? "text-white/90" : "text-emerald-800"
+                      }
+                    />
+                    <span className="uppercase tracking-[0.08em]">
+                      {formatTripDateHeroPill(trip)}
+                    </span>
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <>
+                {formatTripDateHeroPill(trip) ? (
+                  <p
+                    className={`mb-3 inline-flex w-fit rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${
+                      hasCover && coverSrc
+                        ? "bg-white/25 text-white backdrop-blur-md"
+                        : "bg-emerald-100 text-emerald-900"
+                    }`}
+                  >
+                    {formatTripDateHeroPill(trip)}
+                  </p>
+                ) : null}
+                <h1
+                  className={`text-3xl font-bold leading-tight tracking-tight sm:text-[2rem] ${
+                    hasCover && coverSrc ? "text-white drop-shadow-md" : ""
+                  }`}
+                >
+                  {trip.name}
+                </h1>
                 {trip.description ? (
                   <p
-                    className={`mt-3 max-w-2xl text-sm ${
-                      hasCover ? "text-white/95" : "text-slate-700"
+                    className={`mt-3 max-w-2xl text-sm leading-relaxed ${
+                      hasCover && coverSrc ? "text-white/95" : "text-slate-600"
                     }`}
                   >
                     {trip.description}
                   </p>
                 ) : null}
-              </div>
+              </>
+            )}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               {trip.closed ? (
                 <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white backdrop-blur">
                   Closed
@@ -428,7 +553,11 @@ export function TripDetail() {
                 <button
                   type="button"
                   onClick={() => closeTrip()}
-                  className="rounded-lg border border-white/40 bg-white/10 px-3 py-1.5 text-xs font-medium text-white backdrop-blur hover:bg-white/20"
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium backdrop-blur ${
+                    hasCover && coverSrc
+                      ? "border border-white/40 bg-white/15 text-white hover:bg-white/25"
+                      : "border border-slate-300 bg-white text-slate-800"
+                  }`}
                 >
                   Close trip
                 </button>
@@ -436,321 +565,346 @@ export function TripDetail() {
             </div>
           </div>
         </div>
-      </div>
 
-      <TripTabNav active={tab} onChange={setTab} />
+        <TripTabNav active={tab} onChange={setTab} />
 
-      {tab === "overview" && (
-        <div className="flex flex-col gap-8">
-          {user ? (
-            <TripImagesPanel tripId={tripId} trip={trip} user={user} members={members} />
-          ) : null}
+        {tab === "overview" && (
+          <div className="flex flex-col gap-8">
+            {user ? (
+              <TripImagesPanel
+                tripId={tripId}
+                trip={trip}
+                user={user}
+                members={members}
+              />
+            ) : null}
 
-          <section className="rounded-2xl border border-slate-200 bg-white/95 p-5 ring-1 ring-black/5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-              Invite link
-            </h2>
-            <p className="mt-2 text-sm text-slate-600">
-              Share this link so friends can join after signing in with Google.
-            </p>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <code className="max-w-full flex-1 truncate rounded-lg bg-slate-100 px-3 py-2 text-xs text-[#0f172a]">
-                {inviteUrl || "…"}
-              </code>
-              <button
-                type="button"
-                onClick={() => copyInvite()}
-                className="rounded-lg bg-emerald-800 px-4 py-2 text-xs font-semibold text-white hover:brightness-110"
-              >
-                {copied ? "Copied" : "Copy"}
-              </button>
-            </div>
-          </section>
+            <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
+              <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                Invite link
+              </h2>
+              <div className="mt-4 flex flex-wrap items-stretch gap-2 rounded-2xl bg-slate-50/90 p-1 ring-1 ring-slate-200/80">
+                <code className="min-h-[44px] min-w-0 flex-1 truncate rounded-xl bg-white px-3 py-2.5 text-[11px] leading-relaxed text-slate-700">
+                  {inviteUrl || "…"}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => copyInvite()}
+                  className="shrink-0 rounded-xl bg-emerald-800 px-5 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:brightness-110"
+                >
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
+            </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white/95 p-5 ring-1 ring-black/5">
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <h2 className="text-lg font-semibold text-[#0f172a]">
+            <section className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm">
+              <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-900">
                 Balances snapshot
               </h2>
-              <button
-                type="button"
-                onClick={() => setTab("expenses")}
-                className="text-sm font-medium text-emerald-800 hover:underline"
-              >
-                View expenses
-              </button>
-            </div>
-            <p className="mt-1 text-sm text-slate-600">
-              Total spent:{" "}
-              <strong>{totalSpent(expenses).toFixed(2)}</strong>
-            </p>
-            <ul className="mt-3 space-y-1 text-sm">
-              {trip.memberIds.slice(0, 5).map((uid) => (
-                <li key={uid} className="flex justify-between gap-4">
-                  <span>{memberName(uid)}</span>
-                  <span
-                    className={
-                      (balances[uid] ?? 0) >= 0
-                        ? "text-emerald-800"
-                        : "text-red-700"
-                    }
-                  >
-                    {(balances[uid] ?? 0).toFixed(2)}
-                  </span>
-                </li>
-              ))}
-              {trip.memberIds.length > 5 ? (
-                <li className="text-xs text-slate-500">…</li>
-              ) : null}
-            </ul>
-          </section>
+              <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-medium text-slate-500">
+                    Total Trip Spend
+                  </p>
+                  <p className="mt-1 text-4xl font-semibold tabular-nums text-slate-900">
+                    ${totalSpent(expenses).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </p>
+                </div>
+                <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800 ring-1 ring-emerald-100">
+                  {trip.memberIds.length} members
+                </span>
+              </div>
+              <ul className="mt-8 space-y-5 border-t border-slate-100 pt-6">
+                {trip.memberIds.map((uid) => {
+                  const bal = balances[uid] ?? 0;
+                  const m = members.find((x) => x.userId === uid);
+                  const label = m?.name ?? memberName(uid);
+                  return (
+                    <li key={uid} className="flex items-center gap-3">
+                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-700 ring-2 ring-white">
+                        {memberInitials(label)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-slate-900">{label}</p>
+                        <p className="text-xs text-slate-500">
+                          {balanceNarrative(uid, members, balances)}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 text-sm font-semibold tabular-nums ${
+                          bal >= 0 ? "text-emerald-700" : "text-red-600"
+                        }`}
+                      >
+                        {bal > 0
+                          ? "+"
+                          : bal < 0
+                            ? "−"
+                            : ""}
+                        $
+                        {Math.abs(bal).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
 
-          <section>
-            <h2 className="text-lg font-semibold text-[#0f172a]">Timeline</h2>
-            <ol className="mt-4 space-y-3 border-l-2 border-slate-200 pl-4">
-              {timeline.map((ev) => (
-                <li key={ev.id} className="relative text-sm">
-                  <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-emerald-800" />
-                  <TimelineLine
-                    ev={ev}
-                    expenses={expenses}
-                    media={media}
-                    members={members}
-                    memberName={memberName}
-                  />
-                  <time className="mt-0.5 block text-xs text-slate-500">
-                    {ev.createdAt?.toDate
-                      ? ev.createdAt.toDate().toLocaleString()
-                      : ""}
-                  </time>
-                </li>
-              ))}
-            </ol>
-            {timeline.length === 0 ? (
-              <p className="mt-2 text-sm text-slate-500">No activity yet.</p>
-            ) : null}
-          </section>
-        </div>
-      )}
+            <section>
+              <div className="flex items-end justify-between gap-2">
+                <h2 className="text-xl font-semibold text-[#0f172a]">
+                  Timeline
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setTab("photos")}
+                  className="text-sm font-medium text-emerald-800 hover:underline"
+                >
+                  View Journal
+                </button>
+              </div>
+              <ol className="relative mt-6 space-y-8 border-l border-slate-200 pl-6">
+                {timeline.slice(0, 12).map((ev) => {
+                  const t = ev.createdAt?.toDate?.();
+                  const timeLabel = t
+                    ? t.toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })
+                    : "";
+                  return (
+                    <li key={ev.id} className="relative">
+                      <span className="absolute -left-[29px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-700 shadow-sm" />
+                      {ev.type === "expense" ? (
+                        <OverviewExpenseRow
+                          expense={expenses.find((e) => e.id === ev.referenceId)}
+                          memberName={memberName}
+                        />
+                      ) : ev.type === "media" ? (
+                        <OverviewMediaRow
+                          item={media.find((m) => m.id === ev.referenceId)}
+                          memberName={memberName}
+                        />
+                      ) : (
+                        <p className="text-sm text-slate-800">
+                          <TimelineLine
+                            ev={ev}
+                            expenses={expenses}
+                            media={media}
+                            members={members}
+                            memberName={memberName}
+                          />
+                        </p>
+                      )}
+                      <time className="mt-1 block text-xs text-slate-400">
+                        {timeLabel}
+                      </time>
+                    </li>
+                  );
+                })}
+              </ol>
+              {timeline.length === 0 ? (
+                <p className="mt-4 text-sm text-slate-500">No activity yet.</p>
+              ) : null}
+            </section>
+          </div>
+        )}
 
       {tab === "expenses" && (
-        <section className="rounded-2xl border border-slate-200 bg-white/95 p-5 ring-1 ring-black/5">
-          <h2 className="text-lg font-semibold text-[#0f172a]">Expenses</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Equal split across selected members. Total:{" "}
-            <strong>{totalSpent(expenses).toFixed(2)}</strong>
-          </p>
-          {!trip.closed && user ? (
-            <form onSubmit={addExpense} className="mt-4 flex flex-col gap-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="flex flex-col gap-1 text-sm">
-                  <span>Amount</span>
-                  <input
-                    inputMode="decimal"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    className="rounded-lg border border-slate-300/80 bg-white px-3 py-2 text-[#0f172a] shadow-sm ring-1 ring-black/5"
-                    placeholder="0.00"
-                  />
-                </label>
-                <label className="flex flex-col gap-1 text-sm">
-                  <span>Paid by</span>
-                  <select
-                    value={displayPaidBy}
-                    onChange={(e) => setPaidBy(e.target.value)}
-                    className="rounded-lg border border-slate-300/80 bg-white px-3 py-2 text-[#0f172a] shadow-sm ring-1 ring-black/5"
-                  >
-                    {members.map((m) => (
-                      <option key={m.userId} value={m.userId}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <fieldset>
-                <legend className="text-sm font-medium">Split between</legend>
-                <div className="mt-2 flex flex-wrap gap-3">
-                  {members.map((m) => (
-                    <label key={m.userId} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={activeSplitIds.includes(m.userId)}
-                        onChange={(e) => {
-                          const base =
-                            splitIds.length > 0
-                              ? [...splitIds]
-                              : members.map((x) => x.userId);
-                          if (e.target.checked) {
-                            setSplitIds([...new Set([...base, m.userId])]);
-                          } else {
-                            setSplitIds(base.filter((id) => id !== m.userId));
-                          }
-                        }}
-                      />
-                      {m.name}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-              <label className="flex flex-col gap-1 text-sm">
-                <span>Category (optional)</span>
-                <input
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="rounded-lg border border-slate-300/80 bg-white px-3 py-2 text-[#0f172a] shadow-sm ring-1 ring-black/5"
-                  placeholder="Fuel, food, stay…"
-                />
-              </label>
-              {expenseErr ? (
-                <p className="text-sm text-red-600">{expenseErr}</p>
-              ) : null}
-              <button
-                type="submit"
-                disabled={expenseSaving}
-                className="w-fit rounded-2xl bg-[#0f172a] px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
-              >
-                {expenseSaving ? "Saving…" : "Add expense"}
-              </button>
-            </form>
-          ) : null}
-
-          <ul className="mt-6 divide-y divide-slate-200">
-            {expenses.map((ex) => (
-              <li
-                key={ex.id}
-                className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"
-              >
-                <div>
-                  <span className="font-medium">{ex.amount.toFixed(2)}</span>
-                  <span className="text-slate-500">
-                    {" "}
-                    · paid by {memberName(ex.paidBy)}
-                    {ex.category ? ` · ${ex.category}` : ""}
-                  </span>
-                </div>
-                {!trip.closed ? (
-                  <button
-                    type="button"
-                    onClick={() => removeExpense(ex)}
-                    className="text-xs text-red-600 hover:underline"
-                  >
-                    Delete
-                  </button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-6 border-t border-slate-200 pt-4">
-            <h3 className="text-sm font-semibold text-[#0f172a]">Balances</h3>
-            <p className="mt-1 text-xs text-slate-500">
-              Positive means others owe this person; negative means they owe the
-              group.
-            </p>
-            <ul className="mt-3 space-y-1 text-sm">
-              {trip.memberIds.map((uid) => (
-                <li key={uid} className="flex justify-between gap-4">
-                  <span>{memberName(uid)}</span>
-                  <span
-                    className={
-                      (balances[uid] ?? 0) >= 0
-                        ? "text-emerald-800"
-                        : "text-red-700"
-                    }
-                  >
-                    {(balances[uid] ?? 0).toFixed(2)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
+        <TripExpensesPanel
+          trip={trip}
+          user={user}
+          members={members}
+          expenses={expenses}
+          balances={balances}
+          amount={amount}
+          setAmount={setAmount}
+          paidBy={paidBy}
+          setPaidBy={setPaidBy}
+          splitIds={splitIds}
+          setSplitIds={setSplitIds}
+          category={category}
+          setCategory={setCategory}
+          expenseSaving={expenseSaving}
+          expenseErr={expenseErr}
+          onSubmit={addExpense}
+          onRemoveExpense={removeExpense}
+        />
       )}
 
-      {tab === "photos" && (
-        <section className="rounded-2xl border border-slate-200 bg-white/95 p-5 ring-1 ring-black/5">
-          <h2 className="text-lg font-semibold text-[#0f172a]">Photos</h2>
-          {!trip.closed && user ? (
-            <div className="mt-3">
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300/80 bg-white/80 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  disabled={uploading}
-                  onChange={(e) => onPickFile(e.target.files)}
-                />
-                {uploading ? "Uploading…" : "Upload photo"}
-              </label>
-              {uploadErr ? (
-                <p className="mt-2 text-sm text-red-600">{uploadErr}</p>
-              ) : null}
-            </div>
-          ) : null}
-          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {media.map((m) => (
-              <figure
-                key={m.id}
-                className="group relative overflow-hidden rounded-lg border border-slate-200"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={tripImageSrcForUi(m.driveFileId, m.url) ?? m.url}
-                  alt=""
-                  referrerPolicy="no-referrer"
-                  className="aspect-square w-full object-cover"
-                  loading="lazy"
-                />
-                {!trip.closed ? (
-                  <button
-                    type="button"
-                    onClick={() => removeMedia(m)}
-                    className="absolute right-2 top-2 rounded bg-black/60 px-2 py-0.5 text-xs text-white opacity-0 transition group-hover:opacity-100"
-                  >
-                    Remove
-                  </button>
-                ) : null}
-              </figure>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {tab === "route" && user ? (
-        <TripRoutePanel tripId={tripId} trip={trip} user={user} />
+      {tab === "photos" ? (
+        <TripPhotosPanel
+          trip={trip}
+          media={media}
+          user={user}
+          closed={trip.closed === true}
+          uploading={uploading}
+          uploadErr={uploadErr}
+          fileInputRef={photoFileInputRef}
+          onPickFile={onPickFile}
+          onRemoveMedia={removeMedia}
+        />
       ) : null}
 
-      {tab === "checklist" && user ? (
-        <div className="rounded-2xl border border-slate-200 bg-white/95 p-5 ring-1 ring-black/5">
-          <TripChecklistPanel
-            tripId={tripId}
-            trip={trip}
-            user={user}
-            members={members}
+      {tab === "route" ? (
+        <TripRoutePanel
+          tripId={tripId}
+          trip={trip}
+          user={user}
+          photoCount={media.length}
+          onOpenPhotos={() => setTab("photos")}
+        />
+      ) : null}
+
+      {tab === "checklist" ? (
+        <TripChecklistPanel
+          tripId={tripId}
+          trip={trip}
+          user={user}
+          members={members}
+        />
+      ) : null}
+
+      {tab === "members" ? (
+        <TripMembersPanel
+          tripId={tripId}
+          trip={trip}
+          user={user}
+          members={members}
+          inviteUrl={inviteUrl}
+          copied={copied}
+          onCopyInvite={copyInvite}
+        />
+      ) : null}
+      </div>
+
+      {tripBroadcast ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="trip-broadcast-title"
+        >
+          <div className="w-full max-w-sm rounded-[1.75rem] border border-slate-100 bg-white p-6 shadow-2xl shadow-slate-900/20 ring-1 ring-black/5">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-[#14532d]">
+              <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+            </div>
+            <h2
+              id="trip-broadcast-title"
+              className="mt-4 text-center text-lg font-semibold text-[#0f172a]"
+            >
+              {tripBroadcast.kind === "checklist"
+                ? "Checklist reminder"
+                : "Trip members"}
+            </h2>
+            <p className="mt-2 text-center text-sm leading-relaxed text-slate-600">
+              <span className="font-medium text-[#14532d]">
+                {memberName(tripBroadcast.fromUid)}
+              </span>{" "}
+              {tripBroadcast.kind === "checklist"
+                ? "asked everyone to review the packing list."
+                : "nudged everyone about this trip’s travelers."}
+            </p>
+            <button
+              type="button"
+              onClick={() => setTripBroadcast(null)}
+              className="mt-6 w-full rounded-2xl bg-[#14532d] py-3 text-sm font-semibold text-white shadow-md transition hover:brightness-110"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CalendarMiniIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={`h-4 w-4 shrink-0 ${className ?? ""}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </svg>
+  );
+}
+
+function OverviewExpenseRow({
+  expense,
+  memberName,
+}: {
+  expense: Expense | undefined;
+  memberName: (uid: string) => string;
+}) {
+  if (!expense) {
+    return (
+      <p className="text-sm text-slate-500">Expense (details unavailable)</p>
+    );
+  }
+  const title =
+    expense.note?.trim() ||
+    expense.category?.trim() ||
+    "Trip expense";
+  return (
+    <div>
+      <p className="text-sm text-slate-800">
+        Expense added by{" "}
+        <span className="font-medium">{memberName(expense.paidBy)}</span>
+      </p>
+      <div className="mt-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm ring-1 ring-slate-100">
+        <p className="text-xs font-medium text-slate-900">{title}</p>
+        <p className="mt-0.5 text-sm font-semibold text-red-600">
+          ${expense.amount.toFixed(2)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function OverviewMediaRow({
+  item,
+  memberName,
+}: {
+  item: MediaItem | undefined;
+  memberName: (uid: string) => string;
+}) {
+  const src = item
+    ? tripImageSrcForUi(item.driveFileId, item.url) ?? item.url
+    : undefined;
+  return (
+    <div>
+      <p className="text-sm text-slate-800">
+        Photo added by{" "}
+        <span className="font-medium">
+          {item ? memberName(item.uploadedBy) : "…"}
+        </span>
+      </p>
+      {src ? (
+        <div className="mt-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={src}
+            alt=""
+            referrerPolicy="no-referrer"
+            className="h-20 w-20 rounded-lg object-cover ring-1 ring-slate-200"
           />
         </div>
       ) : null}
-
-      {tab === "members" && (
-        <section>
-          <h2 className="text-lg font-semibold text-[#0f172a]">Members</h2>
-          <ul className="mt-3 flex flex-wrap gap-2">
-            {members.map((m) => (
-              <li
-                key={m.userId}
-                className="rounded-full border border-slate-200 bg-white/95 px-3 py-1 text-sm ring-1 ring-black/5"
-              >
-                {m.name}
-                {m.role === "admin" ? (
-                  <span className="ml-1 text-xs text-emerald-800">(admin)</span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-      </div>
     </div>
   );
 }

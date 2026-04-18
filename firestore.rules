@@ -73,6 +73,20 @@ service cloud.firestore {
           && request.resource.data.createdBy == request.auth.uid;
         allow update, delete: if isTripMember(tripId);
       }
+
+      match /checklistReminders/{reminderId} {
+        allow read: if isTripMember(tripId);
+        allow create: if isTripMember(tripId)
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.keys().hasAll(['createdBy', 'createdAt']);
+      }
+
+      match /memberReminders/{reminderId} {
+        allow read: if isTripMember(tripId);
+        allow create: if isTripMember(tripId)
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.keys().hasAll(['createdBy', 'createdAt']);
+      }
     }
   }
 }
