@@ -29,6 +29,7 @@ export function mapTrip(
     inviteToken: String(data.inviteToken ?? ""),
     memberIds: Array.isArray(data.memberIds) ? data.memberIds.map(String) : [],
     closed: data.closed === true,
+    groupSync: data.groupSync === false ? false : true,
     coverImageUrl:
       data.coverImageUrl != null ? String(data.coverImageUrl) : null,
     backgroundImageUrl:

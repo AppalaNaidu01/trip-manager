@@ -16,6 +16,11 @@ export interface Trip {
   inviteToken: string;
   memberIds: string[];
   closed?: boolean;
+  /**
+   * Collaborative planning: when true (default), group can contribute route/stops.
+   * Stored as `groupSync` in Firestore.
+   */
+  groupSync?: boolean;
   coverImageUrl?: string | null;
   backgroundImageUrl?: string | null;
   /** Google Drive folder for trip media (created on first upload) */

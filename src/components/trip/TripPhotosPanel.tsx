@@ -10,21 +10,28 @@ import {
 } from "@/lib/route-segments";
 import type { MediaItem, Trip, TripRoute } from "@/types/models";
 import type { User } from "firebase/auth";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RefObject } from "react";
-
-function tileMinHeightClass(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) {
-    h = (h * 31 + seed.charCodeAt(i)) | 0;
-  }
-  const r = Math.abs(h) % 5;
-  const heights = ["min-h-[148px]", "min-h-[200px]", "min-h-[176px]", "min-h-[228px]", "min-h-[164px]"];
-  return heights[r] ?? "min-h-[180px]";
-}
 
 const selectClass =
   "mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-[#0f172a] shadow-sm ring-1 ring-black/[0.04] outline-none focus:ring-2 focus:ring-[#14532d]/25";
+
+function ChevronIcon({ dir }: { dir: "left" | "right" }) {
+  return (
+    <svg
+      className="h-7 w-7"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      {dir === "left" ? <path d="m15 18-6-6 6-6" /> : <path d="m9 18 6-6-6-6" />}
+    </svg>
+  );
+}
 
 export function TripPhotosPanel({
   trip,
@@ -86,6 +93,85 @@ export function TripPhotosPanel({
     }
     return keys;
   }, [buckets, segmentOrder]);
+
+  /** Flat list in on-screen order (for lightbox prev/next). */
+  const viewerOrder = useMemo(() => {
+    const ordered: MediaItem[] = [];
+    for (const key of visibleKeys) {
+      if (photosSegmentFilter != null && photosSegmentFilter !== key) continue;
+      const items = buckets.get(key);
+      if (items?.length) ordered.push(...items);
+    }
+    return ordered;
+  }, [visibleKeys, buckets, photosSegmentFilter]);
+
+  const [viewerMediaId, setViewerMediaId] = useState<string | null>(null);
+
+  const viewerIndex = useMemo(() => {
+    if (!viewerMediaId) return -1;
+    return viewerOrder.findIndex((m) => m.id === viewerMediaId);
+  }, [viewerMediaId, viewerOrder]);
+
+  const closeViewer = useCallback(() => setViewerMediaId(null), []);
+
+  const goNext = useCallback(() => {
+    if (viewerOrder.length <= 1 || viewerIndex < 0) return;
+    const next = (viewerIndex + 1) % viewerOrder.length;
+    const item = viewerOrder[next];
+    if (item) setViewerMediaId(item.id);
+  }, [viewerOrder, viewerIndex]);
+
+  const goPrev = useCallback(() => {
+    if (viewerOrder.length <= 1 || viewerIndex < 0) return;
+    const prev =
+      (viewerIndex - 1 + viewerOrder.length) % viewerOrder.length;
+    const item = viewerOrder[prev];
+    if (item) setViewerMediaId(item.id);
+  }, [viewerOrder, viewerIndex]);
+
+  useEffect(() => {
+    if (viewerMediaId && viewerIndex < 0) {
+      setViewerMediaId(null);
+    }
+  }, [viewerMediaId, viewerIndex]);
+
+  useEffect(() => {
+    if (!viewerMediaId) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeViewer();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        goNext();
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        goPrev();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [viewerMediaId, closeViewer, goNext, goPrev]);
+
+  useEffect(() => {
+    if (!viewerMediaId) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [viewerMediaId]);
+
+  const openViewer = useCallback((item: MediaItem) => {
+    setViewerMediaId(item.id);
+  }, []);
+
+  const viewerItem =
+    viewerIndex >= 0 ? viewerOrder[viewerIndex] : undefined;
+  const viewerSrc = viewerItem
+    ? (tripImageSrcForUi(viewerItem.driveFileId, viewerItem.url) ??
+      viewerItem.url)
+    : "";
 
   return (
     <section className="flex flex-col gap-6">
@@ -208,25 +294,34 @@ export function TripPhotosPanel({
                 <div className="columns-2 gap-x-3 sm:columns-3 sm:gap-x-4">
                   {items.map((m) => {
                     const src = tripImageSrcForUi(m.driveFileId, m.url) ?? m.url;
-                    const mh = tileMinHeightClass(m.id);
                     return (
                       <figure
                         key={m.id}
-                        className={`group relative mb-3 break-inside-avoid overflow-hidden rounded-[1.75rem] border border-slate-100 bg-slate-100 shadow-sm ring-1 ring-black/[0.04] ${mh}`}
+                        className="group relative mb-3 break-inside-avoid overflow-hidden rounded-[1.75rem] border border-slate-100 bg-slate-100 shadow-sm ring-1 ring-black/[0.04]"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={src}
-                          alt=""
-                          referrerPolicy="no-referrer"
-                          className="h-full min-h-[inherit] w-full object-cover"
-                          loading="lazy"
-                        />
+                        <button
+                          type="button"
+                          onClick={() => openViewer(m)}
+                          className="block w-full cursor-zoom-in text-left leading-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#14532d]/40 focus-visible:ring-offset-2"
+                          aria-label="Open photo"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={src}
+                            alt=""
+                            referrerPolicy="no-referrer"
+                            className="block h-auto w-full max-w-full"
+                            loading="lazy"
+                          />
+                        </button>
                         {!closed ? (
                           <button
                             type="button"
-                            onClick={() => onRemoveMedia(m)}
-                            className="absolute right-2 top-2 rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-medium text-white opacity-0 backdrop-blur-sm transition group-hover:opacity-100"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onRemoveMedia(m);
+                            }}
+                            className="absolute right-2 top-2 z-[1] rounded-full bg-black/55 px-2.5 py-1 text-[11px] font-medium text-white opacity-0 backdrop-blur-sm transition group-hover:opacity-100"
                           >
                             Remove
                           </button>
@@ -245,6 +340,82 @@ export function TripPhotosPanel({
         <p className="text-sm text-red-600" role="alert">
           {uploadErr}
         </p>
+      ) : null}
+
+      {viewerItem && viewerMediaId ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/92 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Photo viewer"
+          onClick={closeViewer}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              closeViewer();
+            }}
+            className="absolute right-3 top-3 z-[102] rounded-full bg-white/10 p-2.5 text-white backdrop-blur-sm transition hover:bg-white/20"
+            aria-label="Close"
+          >
+            <svg
+              className="h-6 w-6"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden
+            >
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+
+          {viewerOrder.length > 1 ? (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goPrev();
+                }}
+                className="absolute left-1 top-1/2 z-[102] -translate-y-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur-sm transition hover:bg-white/20 sm:left-4"
+                aria-label="Previous photo"
+              >
+                <ChevronIcon dir="left" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goNext();
+                }}
+                className="absolute right-1 top-1/2 z-[102] -translate-y-1/2 rounded-full bg-white/10 p-3 text-white backdrop-blur-sm transition hover:bg-white/20 sm:right-4"
+                aria-label="Next photo"
+              >
+                <ChevronIcon dir="right" />
+              </button>
+            </>
+          ) : null}
+
+          <div
+            className="relative z-[101] flex max-h-[min(88vh,100%)] max-w-[min(96vw,100%)] flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={viewerSrc}
+              alt=""
+              referrerPolicy="no-referrer"
+              className="max-h-[min(88vh,100%)] max-w-full object-contain"
+            />
+            {viewerOrder.length > 1 ? (
+              <p className="mt-3 text-center text-sm font-medium text-white/80">
+                {viewerIndex + 1} / {viewerOrder.length}
+              </p>
+            ) : null}
+          </div>
+        </div>
       ) : null}
     </section>
   );

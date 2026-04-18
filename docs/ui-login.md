@@ -12,7 +12,7 @@ The sign-in experience is a **light, mobile-first card** on a soft gray canvas (
 - **Branding:** Rounded-square app mark with blue→purple gradient and a white airplane-style icon; **TripSync** wordmark and tagline *All your trips. One place.*
 - **Decorative row:** Three circular gradient chips with emoji (beach / plane / celebration) for visual warmth without extra assets.
 - **Primary CTA:** White **Continue with Google** button with the standard multicolor Google mark, subtle shadow, and ring.
-- **Legal:** Links to [`/terms`](../src/app/terms/page.tsx) and [`/privacy`](../src/app/privacy/page.tsx) (placeholder copy until real policies exist).
+- **Legal:** Link to [`/privacy`](../src/app/privacy/page.tsx) only (Privacy Policy). There is **no** Terms route in this app.
 - **Footer strip:** Three feature hints — Split bills, Share photos, Stay synced — with emoji labels.
 - **Navigation:** “Back to home” returns to `/`.
 
@@ -24,12 +24,12 @@ If public Firebase env vars are missing, the same visual language is used: cente
 
 ## Related routes
 
-| Path       | Purpose                                      |
-| ---------- | -------------------------------------------- |
-| `/login`   | Google sign-in UI                            |
-| `/terms`   | Terms of Service placeholder                 |
-| `/privacy` | Privacy Policy placeholder                   |
+| Path       | Purpose                    |
+| ---------- | -------------------------- |
+| `/login`   | Google sign-in UI          |
+| `/privacy` | Privacy Policy placeholder |
 
 ## Change log
 
 - **2026-04-18:** Replaced split marketing/hero layout with centered card UI, Google mark SVG, legal links, and footer feature row; added terms/privacy placeholder pages.
+- **2026-04-18 (later):** Removed `/terms` route and Terms link; login footer references Privacy Policy only.

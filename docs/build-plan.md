@@ -7,7 +7,7 @@ This document tracks implementation of the MVP described in [initial-prd.md](./i
 - **Trips** live in `trips/{tripId}` with `memberIds` for querying “my trips”.
 - **Invite links** use documents in `inviteLookups/{token}` (readable publicly for resolving the trip id and name). The trip’s `inviteToken` matches this id.
 - **Join** is performed via `POST /api/join` with a Firebase ID token so the server can update `memberIds` and `members/{uid}` without loosening client Firestore rules.
-- **Subcollections** under each trip: `members`, `expenses`, `media`, `timelineEvents`.
+- **Subcollections** under each trip: `members`, `expenses`, `media`, `timelineEvents`, and a **`route`** subcollection with document id **`summary`** for the manual journey route.
 - **Timeline** entries for expenses and media use deterministic document ids (`expense_{expenseId}`, `media_{mediaId}`) so deletes stay in sync with batched writes.
 - **Media (Google Drive):** On first upload per trip, the app creates a **Drive folder** (named from the trip), sets **anyone** read access, grants **writers** to member emails, and stores `driveFolderId` on the trip. Each file is uploaded with the Drive API; Firestore stores `driveFileId` + thumbnail `url`. See **[media-google-drive.md](./media-google-drive.md)**.
 
@@ -40,7 +40,12 @@ firebase deploy --only firestore:rules,storage
 
 Remaining work is **project configuration**: Firebase project, Google auth, **Drive API enabled**, deploy rules, and fill `.env.local`.
 
-### Documentation
+### Documentation (for developers)
 
-- **[ui-login.md](./ui-login.md)** — Sign-in page layout, branding, legal links, and related routes (`/terms`, `/privacy` placeholders).
+- **[README.md](./README.md)** — Index of all docs in this folder (start here).
+- **[developer-onboarding.md](./developer-onboarding.md)** — Run commands, repo layout, shells, contexts.
+- **[feature-inventory.md](./feature-inventory.md)** — Implemented behavior (search, photos↔route, create trip, share invite, etc.).
+- **[ui-conventions.md](./ui-conventions.md)** — Colors, headers, 16∶10 covers, form patterns.
+- **[firestore-schema-notes.md](./firestore-schema-notes.md)** — Extra fields (`groupSync`, `routeSegmentId`, route doc).
+- **[ui-login.md](./ui-login.md)** — Login page; legal link to **`/privacy` only** (no `/terms` route).
 - **[media-google-drive.md](./media-google-drive.md)** — Drive OAuth, folder creation, Firestore fields, troubleshooting.

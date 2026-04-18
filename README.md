@@ -1,3 +1,13 @@
+# TripSync (trip-manager)
+
+Group trip coordination: expenses, members, photos (Google Drive), routes, and more. Stack: **Next.js App Router**, **Firebase** (Auth + Firestore), **Google Drive** for media.
+
+## Project documentation
+
+**→ [docs/README.md](./docs/README.md)** — index of PRD, build plan, onboarding, features, UI conventions, and Firestore notes. **New contributors should start there.**
+
+---
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

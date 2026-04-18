@@ -247,3 +247,9 @@ Auth:
 ## 💡 Final Note
 
 The goal is not to replace individual tools, but to create a **seamless, trip-centric experience** where everything lives in one place.
+
+---
+
+## 12. 📚 Developer documentation (maintained alongside code)
+
+Implementation details, extended schema, and UI conventions are kept in **`docs/README.md`** and linked files (e.g. developer onboarding, feature inventory, Firestore notes, UI conventions). Use that index when onboarding or when the PRD and running app differ.

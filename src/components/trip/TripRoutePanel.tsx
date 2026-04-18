@@ -209,6 +209,42 @@ export function TripRoutePanel({
     return pinPositions(n);
   }, [stopListForMap.length]);
 
+  const mapLegendRows = useMemo(() => {
+    const rows: {
+      key: string;
+      marker: number | "end";
+      role: string;
+      primary: string;
+      secondary?: string;
+    }[] = [
+      {
+        key: "start",
+        marker: 1,
+        role: "Start",
+        primary: startParts.main,
+        secondary: startParts.sub,
+      },
+    ];
+    stopListForMap.forEach((stop, i) => {
+      const primary = stop.name.trim() || `Stop ${i + 1}`;
+      rows.push({
+        key: `stop-${i}`,
+        marker: i + 2,
+        role: `Stop ${i + 1}`,
+        primary,
+        secondary: stop.notes?.trim() || undefined,
+      });
+    });
+    rows.push({
+      key: "destination",
+      marker: "end",
+      role: "Destination",
+      primary: destParts.main,
+      secondary: destParts.sub,
+    });
+    return rows;
+  }, [startParts, destParts, stopListForMap]);
+
   const field =
     "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-[#0f172a] shadow-sm ring-1 ring-black/[0.04] outline-none focus:ring-2 focus:ring-[#14532d]/25";
 
@@ -268,6 +304,41 @@ export function TripRoutePanel({
             })}
           </div>
         </div>
+        <ul className="mt-3 list-none space-y-2.5" aria-label="Locations on this route">
+          {mapLegendRows.map((row) => (
+            <li key={row.key} className="flex gap-3 text-sm">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#14532d] text-xs font-bold text-white shadow-sm ring-2 ring-white">
+                {row.marker === "end" ? (
+                  <svg
+                    className="h-3.5 w-3.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M4 22V4l15 8-15 8" />
+                  </svg>
+                ) : (
+                  row.marker
+                )}
+              </span>
+              <div className="min-w-0 pt-0.5">
+                <p className="font-semibold leading-snug text-[#0f172a]">
+                  <span className="font-medium text-slate-500">{row.role}</span>
+                  <span className="text-slate-300"> · </span>
+                  {row.primary}
+                </p>
+                {row.secondary ? (
+                  <p className="mt-0.5 text-xs leading-snug text-slate-500">
+                    {row.secondary}
+                  </p>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
       </section>
 
       {canEdit ? (

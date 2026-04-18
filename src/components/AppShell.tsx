@@ -235,6 +235,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { user, logOut } = useAuth();
   const pathname = usePathname();
   const isDashboard = pathname === "/dashboard";
+  const isNewTripPage = pathname === "/trips/new";
   const isTripDetailPage =
     /^\/trips\/[^/]+$/.test(pathname) && pathname !== "/trips/new";
   const [menuOpen, setMenuOpen] = useState(false);
@@ -269,6 +270,45 @@ export function AppShell({ children }: { children: ReactNode }) {
     setMenuOpen(false);
     setProfileOpen(false);
   }, [pathname]);
+
+  if (isNewTripPage) {
+    return (
+      <div className="flex min-h-dvh w-full flex-1 flex-col bg-[#F9F9F7] text-[#0f172a]">
+        <header className="sticky top-0 z-30 border-b border-slate-200/90 bg-white/95 backdrop-blur-sm">
+          <div className="mx-auto grid w-full max-w-lg grid-cols-3 items-center gap-2 px-4 py-3">
+            <Link
+              href="/dashboard"
+              className="flex h-10 w-10 items-center justify-center rounded-xl text-[#14532d] transition hover:bg-emerald-50"
+              aria-label="Back to trips"
+            >
+              <svg
+                className="h-5 w-5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                aria-hidden
+              >
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </Link>
+            <div className="text-center">
+              <span className="text-sm font-semibold uppercase tracking-[0.16em] text-[#14532d]">
+                TripSync
+              </span>
+            </div>
+            <div className="flex justify-end" aria-hidden>
+              <span className="h-10 w-10" />
+            </div>
+          </div>
+        </header>
+        <div className="mx-auto w-full min-w-0 max-w-lg flex-1 px-4 pb-12 pt-4">
+          {children}
+        </div>
+      </div>
+    );
+  }
 
   if (isDashboard) {
     return (

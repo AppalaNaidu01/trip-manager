@@ -471,24 +471,7 @@ export function TripDetail() {
   return (
     <div className="relative flex min-w-0 flex-col gap-6 rounded-2xl sm:gap-8">
       <div className="relative z-10 flex min-w-0 flex-col gap-6 sm:gap-8">
-        <div
-          className={`relative mt-1 overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-sm ring-1 ring-black/5 ${
-            (tab === "photos" ||
-              tab === "route" ||
-              tab === "checklist" ||
-              tab === "members") &&
-              hasCover
-              ? "min-h-[240px] sm:min-h-[300px]"
-              : hasCover
-                ? "min-h-[220px] sm:min-h-[280px]"
-                : tab === "photos" ||
-                    tab === "route" ||
-                    tab === "checklist" ||
-                    tab === "members"
-                  ? "min-h-[200px] sm:min-h-[240px]"
-                  : "min-h-[160px]"
-          }`}
-        >
+        <div className="relative mt-1 aspect-[16/10] w-full overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-sm ring-1 ring-black/5">
           {hasCover && coverSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -502,7 +485,7 @@ export function TripDetail() {
             <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/35 to-black/10" />
           ) : null}
           <div
-            className={`relative flex min-h-[inherit] flex-col justify-end p-5 sm:p-7 ${
+            className={`relative flex h-full min-h-0 flex-col justify-end p-5 sm:p-7 ${
               hasCover ? "text-white" : "text-[#0f172a]"
             }`}
           >

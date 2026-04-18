@@ -139,13 +139,6 @@ export default function LoginPage() {
           <p className="mt-4 text-center text-[11px] leading-relaxed text-slate-400">
             By continuing, you agree to TripSync&apos;s{" "}
             <Link
-              href="/terms"
-              className="text-emerald-800 underline underline-offset-2 hover:text-emerald-900"
-            >
-              Terms of Service
-            </Link>{" "}
-            and{" "}
-            <Link
               href="/privacy"
               className="text-emerald-800 underline underline-offset-2 hover:text-emerald-900"
             >

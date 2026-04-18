@@ -1,18 +1,18 @@
 "use client";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { useDashboardSearch } from "@/contexts/DashboardSearchContext";
-import { docSnapToTrip } from "@/lib/firestore-map";
+import { docSnapToTrip, mapMember } from "@/lib/firestore-map";
 import { tripImageSrcForUi } from "@/lib/google-drive/drive-api";
 import {
   formatMonthYear,
   formatTripDateRangeCard,
+  memberInitials,
   tripListEmoji,
   tripListGradientClass,
   tripTimelineKind,
 } from "@/lib/trip-utils";
 import { getDb } from "@/lib/firebase/client";
-import type { Trip } from "@/types/models";
+import type { Trip, TripMember } from "@/types/models";
 import {
   collection,
   onSnapshot,
@@ -73,22 +73,44 @@ function PlusIcon({ className }: { className?: string }) {
   );
 }
 
-function MemberStack({ count }: { count: number }) {
+function stackInitials(
+  memberIds: string[],
+  members: TripMember[] | undefined,
+): string[] {
+  const byId = new Map((members ?? []).map((m) => [m.userId, m.name]));
+  return memberIds.slice(0, 3).map((uid) => {
+    const name = byId.get(uid);
+    if (name?.trim()) return memberInitials(name);
+    return uid.slice(0, 2).toUpperCase();
+  });
+}
+
+function MemberStack({
+  memberIds,
+  members,
+}: {
+  memberIds: string[];
+  members: TripMember[] | undefined;
+}) {
+  const count = memberIds.length;
   const n = Math.min(3, Math.max(0, count));
   const rings = [
-    "bg-amber-200",
-    "bg-sky-200",
-    "bg-emerald-200",
+    "bg-amber-200 text-amber-950",
+    "bg-sky-200 text-sky-950",
+    "bg-emerald-200 text-emerald-950",
   ];
+  const initials = stackInitials(memberIds, members);
   return (
     <div className="flex items-center">
       <div className="flex -space-x-2">
         {Array.from({ length: n }).map((_, i) => (
           <div
-            key={i}
-            className={`h-8 w-8 rounded-full border-2 border-white ${rings[i % 3]}`}
+            key={`${memberIds[i]}-${i}`}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold tabular-nums ${rings[i % 3]}`}
             aria-hidden
-          />
+          >
+            {initials[i] ?? "?"}
+          </div>
         ))}
       </div>
       {count > 3 ? (
@@ -103,9 +125,11 @@ function MemberStack({ count }: { count: number }) {
 function FeaturedTripCard({
   trip,
   kind,
+  members,
 }: {
   trip: Trip;
   kind: "current" | "planned";
+  members: TripMember[] | undefined;
 }) {
   const thumbSrc = tripImageSrcForUi(trip.coverDriveFileId, trip.coverImageUrl);
   const emoji = tripListEmoji(trip.id);
@@ -153,7 +177,7 @@ function FeaturedTripCard({
           {formatTripDateRangeCard(trip)}
         </p>
         <div className="mt-4 flex items-center justify-between gap-2">
-          <MemberStack count={trip.memberIds.length} />
+          <MemberStack memberIds={trip.memberIds} members={members} />
           <ChevronRightIcon className="h-5 w-5 shrink-0 text-slate-300" />
         </div>
       </div>
@@ -201,11 +225,31 @@ function MemoryRow({ trip }: { trip: Trip }) {
   );
 }
 
+function tripMatchesSearchQuery(t: Trip, raw: string): boolean {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) return true;
+  const terms = trimmed.split(/\s+/).filter(Boolean);
+  const name = (t.name ?? "").toLowerCase();
+  const desc = (t.description ?? "").toLowerCase();
+  const id = t.id.toLowerCase();
+  const dates = formatTripDateRangeCard(t).toLowerCase();
+  return terms.every(
+    (term) =>
+      name.includes(term) ||
+      desc.includes(term) ||
+      id.includes(term) ||
+      dates.includes(term),
+  );
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
-  const { query, setQuery } = useDashboardSearch();
+  const [searchQuery, setSearchQuery] = useState("");
   const [trips, setTrips] = useState<Trip[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [membersByTrip, setMembersByTrip] = useState<
+    Record<string, TripMember[]>
+  >({});
 
   useEffect(() => {
     if (!user) return;
@@ -234,15 +278,50 @@ export default function DashboardPage() {
     return () => unsub();
   }, [user]);
 
+  const tripIdsKey = [...trips].map((t) => t.id).sort().join(",");
+
+  useEffect(() => {
+    if (!user) {
+      setMembersByTrip({});
+      return;
+    }
+    const ids = tripIdsKey.split(",").filter(Boolean);
+    if (ids.length === 0) {
+      setMembersByTrip({});
+      return;
+    }
+    const db = getDb();
+    const idSet = new Set(ids);
+    setMembersByTrip((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(next)) {
+        if (!idSet.has(k)) delete next[k];
+      }
+      return next;
+    });
+    const unsubs: (() => void)[] = [];
+    for (const tripId of ids) {
+      const col = collection(db, "trips", tripId, "members");
+      unsubs.push(
+        onSnapshot(col, (snap) => {
+          const list = snap.docs.map((d) => mapMember(d.id, d.data()));
+          list.sort((a, b) => {
+            const ta = a.joinedAt?.toMillis?.() ?? 0;
+            const tb = b.joinedAt?.toMillis?.() ?? 0;
+            return ta - tb;
+          });
+          setMembersByTrip((prev) => ({ ...prev, [tripId]: list }));
+        }),
+      );
+    }
+    return () => {
+      unsubs.forEach((u) => u());
+    };
+  }, [user, tripIdsKey]);
+
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return trips;
-    return trips.filter(
-      (t) =>
-        t.name.toLowerCase().includes(q) ||
-        t.description.toLowerCase().includes(q),
-    );
-  }, [trips, query]);
+    return trips.filter((t) => tripMatchesSearchQuery(t, searchQuery));
+  }, [trips, searchQuery]);
 
   const { currentTrips, plannedTrips, pastTrips } = useMemo(() => {
     const current: Trip[] = [];
@@ -287,8 +366,9 @@ export default function DashboardPage() {
         <input
           id="dashboard-trip-search"
           type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          autoComplete="off"
           placeholder="Search trips..."
           className="mt-5 w-full rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm outline-none ring-0 placeholder:text-slate-400 focus:border-emerald-300 focus:ring-2 focus:ring-emerald-200"
         />
@@ -329,10 +409,20 @@ export default function DashboardPage() {
 
       <div className="flex flex-col gap-5">
         {currentTrips.map((t) => (
-          <FeaturedTripCard key={t.id} trip={t} kind="current" />
+          <FeaturedTripCard
+            key={t.id}
+            trip={t}
+            kind="current"
+            members={membersByTrip[t.id]}
+          />
         ))}
         {plannedTrips.map((t) => (
-          <FeaturedTripCard key={t.id} trip={t} kind="planned" />
+          <FeaturedTripCard
+            key={t.id}
+            trip={t}
+            kind="planned"
+            members={membersByTrip[t.id]}
+          />
         ))}
       </div>
 
