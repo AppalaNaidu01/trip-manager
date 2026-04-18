@@ -2,6 +2,8 @@
 
 import {
   GoogleAuthProvider,
+  reauthenticateWithPopup,
+  reauthenticateWithRedirect,
   signInWithPopup,
   signInWithRedirect,
 } from "firebase/auth";
@@ -72,7 +74,6 @@ export function primeDriveAccessTokenFromSignIn(accessToken: string) {
 export async function getGoogleDriveAccessToken(
   forceRefresh = false,
 ): Promise<string> {
-  const now = Date.now();
   if (!forceRefresh) {
     const hit = effectiveCache();
     if (hit) {
@@ -83,14 +84,23 @@ export async function getGoogleDriveAccessToken(
   const auth = getFirebaseAuth();
   const provider = new GoogleAuthProvider();
   provider.addScope(DRIVE_FILE_SCOPE);
+  const loginHint = auth.currentUser?.email?.trim();
+  if (loginHint) {
+    provider.setCustomParameters({ login_hint: loginHint });
+  }
 
   try {
-    const result = await signInWithPopup(auth, provider);
+    // Keep Drive consent tied to the currently signed-in app user when possible.
+    // This avoids account-switch loops that interrupt uploads.
+    const result = auth.currentUser
+      ? await reauthenticateWithPopup(auth.currentUser, provider)
+      : await signInWithPopup(auth, provider);
     const cred = GoogleAuthProvider.credentialFromResult(result);
     const token = cred?.accessToken;
     if (!token) {
       throw new Error("Google sign-in did not return an access token.");
     }
+    const now = Date.now();
     memory = {
       token,
       expiresAt: now + 55 * 60 * 1000,
@@ -106,7 +116,11 @@ export async function getGoogleDriveAccessToken(
       code === "auth/popup-blocked" ||
       code === "auth/operation-not-supported-in-this-environment"
     ) {
-      await signInWithRedirect(auth, provider);
+      if (auth.currentUser) {
+        await reauthenticateWithRedirect(auth.currentUser, provider);
+      } else {
+        await signInWithRedirect(auth, provider);
+      }
       throw new Error(
         "Redirecting to Google for Drive access. Continue here after signing in.",
       );
