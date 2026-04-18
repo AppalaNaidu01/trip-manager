@@ -10,8 +10,8 @@ TripSync stores trip photos, cover, and background images in **the signed-in use
 
 ## User flow
 
-1. User signs in with Google (existing Firebase flow).
-2. On the first upload for a trip, the app opens a **Google consent popup** to add the `drive.file` scope (if not already granted).
+1. User signs in with Google. On **desktop**, Firebase uses a **popup**; on **phones/tablets** (and if the browser blocks popups), the app uses a **full-page redirect** to Google instead — the app completes sign-in with `getRedirectResult` on load and caches the Drive access token the same way.
+2. On the first upload for a trip, the app requests the `drive.file` scope via **popup or redirect** (same rules as above).
 3. The app **creates a folder** in the user’s My Drive named like `TripName_tripIdSuffix`.
 4. The folder is shared:
    - **Anyone** with the link can **read** (public gallery-style access for thumbnails).
@@ -33,7 +33,7 @@ Legacy rows that only have a Firebase Storage `url` and no `driveFileId` still w
 
 ## Tokens
 
-The Google **access token** is obtained from the Firebase `signInWithPopup` result (`GoogleAuthProvider.credentialFromResult`) and cached in memory for ~55 minutes. On `401` from the Drive API, the cache is cleared and the user is prompted again.
+The Google **access token** is obtained from the Firebase sign-in result (`GoogleAuthProvider.credentialFromResult`) after either **popup** or **redirect**, and cached in memory/sessionStorage for ~55 minutes. `AuthContext` calls `getRedirectResult` on startup so returning mobile users get the token without a second step. On `401` from the Drive API, the cache is cleared and the user is prompted again.
 
 ## Troubleshooting
 

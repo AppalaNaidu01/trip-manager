@@ -9,12 +9,15 @@ import {
   type ReactNode,
 } from "react";
 import {
+  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   type User,
 } from "firebase/auth";
+import { prefersAuthRedirect } from "@/lib/auth-utils";
 import { getFirebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase/client";
 import {
   clearDriveTokenCache,
@@ -46,6 +49,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsub();
   }, [configError]);
 
+  /** Complete Google redirect sign-in (mobile / popup-blocked) and prime Drive OAuth token. */
+  useEffect(() => {
+    if (configError) return;
+    const auth = getFirebaseAuth();
+    void getRedirectResult(auth)
+      .then((result) => {
+        if (!result) return;
+        const cred = GoogleAuthProvider.credentialFromResult(result);
+        if (cred?.accessToken) {
+          primeDriveAccessTokenFromSignIn(cred.accessToken);
+        }
+      })
+      .catch((err) => {
+        console.error("getRedirectResult:", err);
+      });
+  }, [configError]);
+
   const loading = pending;
 
   const value = useMemo<AuthState>(
@@ -56,10 +76,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInWithGoogle: async () => {
         if (configError) return;
         const auth = getFirebaseAuth();
-        const result = await signInWithPopup(auth, googleProvider);
-        const cred = GoogleAuthProvider.credentialFromResult(result);
-        if (cred?.accessToken) {
-          primeDriveAccessTokenFromSignIn(cred.accessToken);
+        if (prefersAuthRedirect()) {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        }
+        try {
+          const result = await signInWithPopup(auth, googleProvider);
+          const cred = GoogleAuthProvider.credentialFromResult(result);
+          if (cred?.accessToken) {
+            primeDriveAccessTokenFromSignIn(cred.accessToken);
+          }
+        } catch (e: unknown) {
+          const code =
+            e && typeof e === "object" && "code" in e
+              ? String((e as { code: string }).code)
+              : "";
+          if (
+            code === "auth/popup-blocked" ||
+            code === "auth/operation-not-supported-in-this-environment"
+          ) {
+            await signInWithRedirect(auth, googleProvider);
+            return;
+          }
+          throw e;
         }
       },
       logOut: async () => {

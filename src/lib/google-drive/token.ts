@@ -1,6 +1,11 @@
 "use client";
 
-import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+} from "firebase/auth";
+import { prefersAuthRedirect } from "@/lib/auth-utils";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 import { DRIVE_FILE_SCOPE } from "./constants";
 
@@ -56,7 +61,7 @@ export function clearDriveTokenCache() {
 }
 
 /**
- * After Firebase `signInWithPopup` with {@link googleProvider} (Drive scope), store the
+ * After Firebase sign-in with Drive scope (`signInWithPopup` or redirect flow), store the
  * Google OAuth access token so Drive uploads do not open a second consent flow.
  */
 export function primeDriveAccessTokenFromSignIn(accessToken: string) {
@@ -80,17 +85,40 @@ export async function getGoogleDriveAccessToken(
   const provider = new GoogleAuthProvider();
   provider.addScope(DRIVE_FILE_SCOPE);
 
-  const result = await signInWithPopup(auth, provider);
-  const cred = GoogleAuthProvider.credentialFromResult(result);
-  const token = cred?.accessToken;
-  if (!token) {
-    throw new Error("Google sign-in did not return an access token.");
+  if (prefersAuthRedirect()) {
+    await signInWithRedirect(auth, provider);
+    throw new Error(
+      "Redirecting to Google for Drive access. Continue here after signing in.",
+    );
   }
 
-  memory = {
-    token,
-    expiresAt: now + 55 * 60 * 1000,
-  };
-  writeStorage(memory);
-  return token;
+  try {
+    const result = await signInWithPopup(auth, provider);
+    const cred = GoogleAuthProvider.credentialFromResult(result);
+    const token = cred?.accessToken;
+    if (!token) {
+      throw new Error("Google sign-in did not return an access token.");
+    }
+    memory = {
+      token,
+      expiresAt: now + 55 * 60 * 1000,
+    };
+    writeStorage(memory);
+    return token;
+  } catch (e: unknown) {
+    const code =
+      e && typeof e === "object" && "code" in e
+        ? String((e as { code: string }).code)
+        : "";
+    if (
+      code === "auth/popup-blocked" ||
+      code === "auth/operation-not-supported-in-this-environment"
+    ) {
+      await signInWithRedirect(auth, provider);
+      throw new Error(
+        "Redirecting to Google for Drive access. Continue here after signing in.",
+      );
+    }
+    throw e;
+  }
 }
