@@ -34,7 +34,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  type CSSProperties,
 } from "react";
 import { TripChecklistPanel } from "./TripChecklistPanel";
 import { TripImagesPanel } from "./TripImagesPanel";
@@ -356,19 +355,24 @@ export function TripDetail() {
     trip.backgroundImageUrl,
   );
 
-  const shellStyle: CSSProperties | undefined = backgroundSrc
-    ? {
-        backgroundImage: `linear-gradient(rgba(255,255,255,0.88), rgba(255,255,255,0.92)), url(${backgroundSrc})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }
-    : undefined;
-
   return (
-    <div
-      className="flex flex-col gap-6 rounded-2xl sm:gap-8"
-      style={shellStyle}
-    >
+    <div className="relative flex flex-col gap-6 overflow-hidden rounded-2xl sm:gap-8">
+      {backgroundSrc ? (
+        <>
+          <img
+            aria-hidden
+            src={backgroundSrc}
+            alt=""
+            referrerPolicy="no-referrer"
+            className="pointer-events-none absolute inset-0 z-0 min-h-full w-full object-cover"
+          />
+          <div
+            className="pointer-events-none absolute inset-0 z-[1] bg-gradient-to-b from-white/[0.88] to-white/[0.92]"
+            aria-hidden
+          />
+        </>
+      ) : null}
+      <div className="relative z-10 flex flex-col gap-6 sm:gap-8">
       <div>
         <Link
           href="/dashboard"
@@ -387,6 +391,7 @@ export function TripDetail() {
             <img
               src={coverSrc}
               alt=""
+              referrerPolicy="no-referrer"
               className="absolute inset-0 h-full w-full object-cover"
             />
           ) : null}
@@ -693,6 +698,7 @@ export function TripDetail() {
                 <img
                   src={tripImageSrcForUi(m.driveFileId, m.url) ?? m.url}
                   alt=""
+                  referrerPolicy="no-referrer"
                   className="aspect-square w-full object-cover"
                   loading="lazy"
                 />
@@ -744,6 +750,7 @@ export function TripDetail() {
           </ul>
         </section>
       )}
+      </div>
     </div>
   );
 }

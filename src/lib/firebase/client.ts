@@ -2,6 +2,7 @@ import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import { DRIVE_FILE_SCOPE } from "@/lib/google-drive/constants";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -46,4 +47,6 @@ export function getFirebaseStorage() {
   return getStorage(getFirebaseApp());
 }
 
+/** Include Drive `drive.file` so login consent covers trip media (same session as Firebase). */
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope(DRIVE_FILE_SCOPE);

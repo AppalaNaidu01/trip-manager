@@ -9,12 +9,17 @@ import {
   type ReactNode,
 } from "react";
 import {
+  GoogleAuthProvider,
   onAuthStateChanged,
   signInWithPopup,
   signOut,
   type User,
 } from "firebase/auth";
 import { getFirebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase/client";
+import {
+  clearDriveTokenCache,
+  primeDriveAccessTokenFromSignIn,
+} from "@/lib/google-drive/token";
 
 type AuthState = {
   user: User | null;
@@ -51,10 +56,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInWithGoogle: async () => {
         if (configError) return;
         const auth = getFirebaseAuth();
-        await signInWithPopup(auth, googleProvider);
+        const result = await signInWithPopup(auth, googleProvider);
+        const cred = GoogleAuthProvider.credentialFromResult(result);
+        if (cred?.accessToken) {
+          primeDriveAccessTokenFromSignIn(cred.accessToken);
+        }
       },
       logOut: async () => {
         if (configError) return;
+        clearDriveTokenCache();
         const auth = getFirebaseAuth();
         await signOut(auth);
       },

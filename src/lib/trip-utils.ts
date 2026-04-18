@@ -64,6 +64,58 @@ export function tripListGradientClass(seed: string): string {
   return gradients[Math.abs(h) % gradients.length];
 }
 
+export type TripTimelineKind = "current" | "planned" | "past";
+
+/**
+ * Classify a trip for dashboard sections using local calendar days.
+ * Closed trips are shown as past.
+ */
+export function tripTimelineKind(
+  trip: Pick<Trip, "startDate" | "endDate" | "closed">,
+  now = new Date(),
+): TripTimelineKind {
+  if (trip.closed) return "past";
+  const startStr = trip.startDate?.slice(0, 10) || "1970-01-01";
+  const endStr = trip.endDate?.slice(0, 10) || startStr;
+  const [ys, ms, ds] = startStr.split("-").map(Number);
+  const [ye, me, de] = endStr.split("-").map(Number);
+  const start = new Date(ys, ms - 1, ds);
+  const end = new Date(ye, me - 1, de);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tToday = today.getTime();
+  if (end.getTime() < tToday) return "past";
+  if (start.getTime() > tToday) return "planned";
+  return "current";
+}
+
+/** e.g. "May 2024" for compact list rows */
+export function formatMonthYear(iso: string): string {
+  if (!iso || iso.length < 10) return "—";
+  const d = new Date(`${iso.slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+/** e.g. "Aug 12, 2024 - Aug 24, 2024" for featured cards */
+export function formatTripDateRangeCard(
+  trip: Pick<Trip, "startDate" | "endDate">,
+): string {
+  function part(iso: string): string {
+    if (!iso || iso.length < 10) return "";
+    const d = new Date(`${iso.slice(0, 10)}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+  const a = part(trip.startDate || "");
+  const b = trip.endDate ? part(trip.endDate) : "";
+  if (a && b && b !== a) return `${a} - ${b}`;
+  return a || "—";
+}
+
 /** Positive = should receive money; negative = owes money */
 export function computeBalances(
   memberIds: string[],

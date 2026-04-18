@@ -6,18 +6,74 @@ import { DRIVE_FILE_SCOPE } from "./constants";
 
 type Cache = { token: string; expiresAt: number };
 
-let cache: Cache | null = null;
+const STORAGE_KEY = "tripsync_drive_access_v1";
+
+let memory: Cache | null = null;
+
+function readStorage(): Cache | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const c = JSON.parse(raw) as Cache;
+    if (typeof c.token !== "string" || typeof c.expiresAt !== "number") {
+      return null;
+    }
+    return c;
+  } catch {
+    return null;
+  }
+}
+
+function writeStorage(c: Cache): void {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(c));
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+function effectiveCache(): Cache | null {
+  const now = Date.now();
+  if (memory && now < memory.expiresAt - 60_000) {
+    return memory;
+  }
+  const stored = readStorage();
+  if (stored && now < stored.expiresAt - 60_000) {
+    memory = stored;
+    return memory;
+  }
+  return null;
+}
 
 export function clearDriveTokenCache() {
-  cache = null;
+  memory = null;
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * After Firebase `signInWithPopup` with {@link googleProvider} (Drive scope), store the
+ * Google OAuth access token so Drive uploads do not open a second consent flow.
+ */
+export function primeDriveAccessTokenFromSignIn(accessToken: string) {
+  const expiresAt = Date.now() + 55 * 60 * 1000;
+  memory = { token: accessToken, expiresAt };
+  writeStorage(memory);
 }
 
 export async function getGoogleDriveAccessToken(
   forceRefresh = false,
 ): Promise<string> {
   const now = Date.now();
-  if (!forceRefresh && cache && now < cache.expiresAt - 60_000) {
-    return cache.token;
+  if (!forceRefresh) {
+    const hit = effectiveCache();
+    if (hit) {
+      return hit.token;
+    }
   }
 
   const auth = getFirebaseAuth();
@@ -31,9 +87,10 @@ export async function getGoogleDriveAccessToken(
     throw new Error("Google sign-in did not return an access token.");
   }
 
-  cache = {
+  memory = {
     token,
     expiresAt: now + 55 * 60 * 1000,
   };
+  writeStorage(memory);
   return token;
 }

@@ -136,6 +136,7 @@ export function TripImagesPanel({
               <img
                 src={coverSrc}
                 alt=""
+                referrerPolicy="no-referrer"
                 className="h-full w-full object-cover"
               />
             ) : null}
@@ -176,6 +177,7 @@ export function TripImagesPanel({
               <img
                 src={backgroundSrc}
                 alt=""
+                referrerPolicy="no-referrer"
                 className="h-full w-full object-cover opacity-90"
               />
             ) : null}
