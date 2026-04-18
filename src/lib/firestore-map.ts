@@ -1,9 +1,11 @@
 import type {
+  ChecklistItem,
   Expense,
   MediaItem,
   TimelineEvent,
   Trip,
   TripMember,
+  TripRoute,
 } from "@/types/models";
 import type { DocumentData, QueryDocumentSnapshot } from "firebase/firestore";
 
@@ -11,16 +13,30 @@ export function mapTrip(
   id: string,
   data: DocumentData,
 ): Trip {
+  const legacyDate = data.date != null ? String(data.date) : "";
+  const startDate =
+    data.startDate != null ? String(data.startDate) : legacyDate;
   return {
     id,
     name: String(data.name ?? ""),
     description: String(data.description ?? ""),
-    date: String(data.date ?? ""),
+    startDate,
+    endDate:
+      data.endDate != null && String(data.endDate).length > 0
+        ? String(data.endDate)
+        : null,
     createdBy: String(data.createdBy ?? ""),
     inviteToken: String(data.inviteToken ?? ""),
     memberIds: Array.isArray(data.memberIds) ? data.memberIds.map(String) : [],
     closed: data.closed === true,
+    coverImageUrl:
+      data.coverImageUrl != null ? String(data.coverImageUrl) : null,
+    backgroundImageUrl:
+      data.backgroundImageUrl != null
+        ? String(data.backgroundImageUrl)
+        : null,
     createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
   };
 }
 
@@ -89,4 +105,62 @@ export function mapTimeline(
 
 export function docSnapToTrip(snap: QueryDocumentSnapshot): Trip {
   return mapTrip(snap.id, snap.data());
+}
+
+export function mapTripRoute(
+  tripId: string,
+  data: DocumentData,
+): TripRoute {
+  const rawStops = data.stops;
+  const stops: TripRoute["stops"] = Array.isArray(rawStops)
+    ? rawStops
+        .map((s: unknown, i: number) => {
+          if (!s || typeof s !== "object") return null;
+          const o = s as Record<string, unknown>;
+          return {
+            name: String(o.name ?? ""),
+            order: typeof o.order === "number" ? o.order : i,
+            notes:
+              o.notes != null && String(o.notes).length > 0
+                ? String(o.notes)
+                : undefined,
+          };
+        })
+        .filter(Boolean) as TripRoute["stops"]
+    : [];
+  stops.sort((a, b) => a.order - b.order);
+  return {
+    tripId,
+    startLocation: String(data.startLocation ?? ""),
+    destination: String(data.destination ?? ""),
+    stops,
+    distanceText: String(data.distanceText ?? ""),
+    durationText: String(data.durationText ?? ""),
+    routeNotes: String(data.routeNotes ?? ""),
+    createdBy: String(data.createdBy ?? ""),
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+  };
+}
+
+export function mapChecklistItem(
+  id: string,
+  tripId: string,
+  data: DocumentData,
+): ChecklistItem {
+  return {
+    id,
+    tripId,
+    text: String(data.text ?? ""),
+    category: String(data.category ?? "Other"),
+    isCompleted: data.isCompleted === true,
+    assignedTo:
+      data.assignedTo != null && String(data.assignedTo).length > 0
+        ? String(data.assignedTo)
+        : null,
+    createdBy: String(data.createdBy ?? ""),
+    completedAt: data.completedAt ?? null,
+    createdAt: data.createdAt,
+    updatedAt: data.updatedAt,
+  };
 }

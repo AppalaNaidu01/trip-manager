@@ -1,4 +1,12 @@
-import type { Expense } from "@/types/models";
+import type { Expense, Trip } from "@/types/models";
+
+/** Human-readable date range for trip headers and cards */
+export function formatTripDateRange(trip: Pick<Trip, "startDate" | "endDate">): string {
+  const s = trip.startDate || "";
+  const e = trip.endDate;
+  if (s && e && e !== s) return `${s} – ${e}`;
+  return s || "—";
+}
 
 /** Positive = should receive money; negative = owes money */
 export function computeBalances(

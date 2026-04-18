@@ -18,9 +18,10 @@ export default function NewTripPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [date, setDate] = useState(() =>
+  const [startDate, setStartDate] = useState(() =>
     new Date().toISOString().slice(0, 10),
   );
+  const [endDate, setEndDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +46,8 @@ export default function NewTripPage() {
       batch.set(tripRef, {
         name: n,
         description: description.trim(),
-        date,
+        startDate,
+        ...(endDate.trim() ? { endDate: endDate.trim() } : {}),
         createdBy: user.uid,
         inviteToken,
         memberIds: [user.uid],
@@ -97,17 +99,30 @@ export default function NewTripPage() {
             placeholder="Weekend ride to the coast"
           />
         </label>
-        <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Date
-          </span>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
-          />
-        </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Start date
+            </span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              End date (optional)
+            </span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+            />
+          </label>
+        </div>
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
             Description

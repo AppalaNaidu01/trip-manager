@@ -9,7 +9,7 @@ import {
   mapTrip,
 } from "@/lib/firestore-map";
 import { getDb, getFirebaseStorage } from "@/lib/firebase/client";
-import { computeBalances, totalSpent } from "@/lib/trip-utils";
+import { computeBalances, formatTripDateRange, totalSpent } from "@/lib/trip-utils";
 import type { Expense, MediaItem, TimelineEvent, Trip, TripMember } from "@/types/models";
 import {
   collection,
@@ -24,12 +24,23 @@ import {
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
+import { TripChecklistPanel } from "./TripChecklistPanel";
+import { TripImagesPanel } from "./TripImagesPanel";
+import { TripRoutePanel } from "./TripRoutePanel";
+import { TripTabNav, type TripTabId } from "./TripTabNav";
 
 export function TripDetail() {
   const params = useParams();
   const tripId = params.tripId as string;
   const { user } = useAuth();
+  const [tab, setTab] = useState<TripTabId>("overview");
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [members, setMembers] = useState<TripMember[]>([]);
@@ -314,8 +325,19 @@ export function TripDetail() {
   const memberName = (uid: string) =>
     members.find((m) => m.userId === uid)?.name ?? uid.slice(0, 8);
 
+  const shellStyle: CSSProperties | undefined = trip.backgroundImageUrl
+    ? {
+        backgroundImage: `linear-gradient(rgba(255,255,255,0.88), rgba(255,255,255,0.92)), url(${trip.backgroundImageUrl})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }
+    : undefined;
+
   return (
-    <div className="flex flex-col gap-10">
+    <div
+      className="flex flex-col gap-6 rounded-2xl sm:gap-8"
+      style={shellStyle}
+    >
       <div>
         <Link
           href="/dashboard"
@@ -323,288 +345,386 @@ export function TripDetail() {
         >
           ← Trips
         </Link>
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-              {trip.name}
-            </h1>
-            <p className="mt-1 text-sm text-zinc-500">{trip.date}</p>
-            {trip.description ? (
-              <p className="mt-3 max-w-2xl text-zinc-700 dark:text-zinc-300">
-                {trip.description}
-              </p>
-            ) : null}
-          </div>
-          {trip.closed ? (
-            <span className="rounded-full bg-zinc-200 px-3 py-1 text-xs font-medium text-zinc-800 dark:bg-zinc-700 dark:text-zinc-200">
-              Closed
-            </span>
-          ) : isAdmin ? (
-            <button
-              type="button"
-              onClick={() => closeTrip()}
-              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            >
-              Close trip
-            </button>
+
+        <div
+          className={`relative mt-3 overflow-hidden rounded-2xl border border-zinc-200 bg-gradient-to-br from-emerald-50 to-zinc-100 dark:border-zinc-800 dark:from-emerald-950/40 dark:to-zinc-900 ${
+            trip.coverImageUrl ? "min-h-[140px] sm:min-h-[180px]" : "min-h-0"
+          }`}
+        >
+          {trip.coverImageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={trip.coverImageUrl}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+            />
           ) : null}
+          <div
+            className={`relative p-4 sm:p-6 ${
+              trip.coverImageUrl
+                ? "bg-black/45 text-white"
+                : "text-zinc-900 dark:text-zinc-50"
+            }`}
+          >
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight">
+                  {trip.name}
+                </h1>
+                <p className="mt-1 text-sm opacity-90">
+                  {formatTripDateRange(trip)}
+                </p>
+                {trip.description ? (
+                  <p
+                    className={`mt-3 max-w-2xl text-sm ${
+                      trip.coverImageUrl ? "text-white/95" : "text-zinc-700 dark:text-zinc-300"
+                    }`}
+                  >
+                    {trip.description}
+                  </p>
+                ) : null}
+              </div>
+              {trip.closed ? (
+                <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white backdrop-blur dark:bg-black/30">
+                  Closed
+                </span>
+              ) : isAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => closeTrip()}
+                  className="rounded-lg border border-white/40 bg-white/10 px-3 py-1.5 text-xs font-medium text-white backdrop-blur hover:bg-white/20"
+                >
+                  Close trip
+                </button>
+              ) : null}
+            </div>
+          </div>
         </div>
       </div>
 
-      <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-          Invite link
-        </h2>
-        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Share this link so friends can join after signing in with Google.
-        </p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <code className="max-w-full flex-1 truncate rounded-lg bg-zinc-100 px-3 py-2 text-xs text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
-            {inviteUrl || "…"}
-          </code>
-          <button
-            type="button"
-            onClick={() => copyInvite()}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
-          >
-            {copied ? "Copied" : "Copy"}
-          </button>
-        </div>
-      </section>
+      <TripTabNav active={tab} onChange={setTab} />
 
-      <section>
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-          Members
-        </h2>
-        <ul className="mt-3 flex flex-wrap gap-2">
-          {members.map((m) => (
-            <li
-              key={m.userId}
-              className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            >
-              {m.name}
-              {m.role === "admin" ? (
-                <span className="ml-1 text-xs text-emerald-700 dark:text-emerald-400">
-                  (admin)
-                </span>
+      {tab === "overview" && (
+        <div className="flex flex-col gap-8">
+          {user ? (
+            <TripImagesPanel tripId={tripId} trip={trip} user={user} />
+          ) : null}
+
+          <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+              Invite link
+            </h2>
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+              Share this link so friends can join after signing in with Google.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <code className="max-w-full flex-1 truncate rounded-lg bg-zinc-100 px-3 py-2 text-xs text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
+                {inviteUrl || "…"}
+              </code>
+              <button
+                type="button"
+                onClick={() => copyInvite()}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
+              >
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                Balances snapshot
+              </h2>
+              <button
+                type="button"
+                onClick={() => setTab("expenses")}
+                className="text-sm font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+              >
+                View expenses
+              </button>
+            </div>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              Total spent:{" "}
+              <strong>{totalSpent(expenses).toFixed(2)}</strong>
+            </p>
+            <ul className="mt-3 space-y-1 text-sm">
+              {trip.memberIds.slice(0, 5).map((uid) => (
+                <li key={uid} className="flex justify-between gap-4">
+                  <span>{memberName(uid)}</span>
+                  <span
+                    className={
+                      (balances[uid] ?? 0) >= 0
+                        ? "text-emerald-700 dark:text-emerald-400"
+                        : "text-red-700 dark:text-red-400"
+                    }
+                  >
+                    {(balances[uid] ?? 0).toFixed(2)}
+                  </span>
+                </li>
+              ))}
+              {trip.memberIds.length > 5 ? (
+                <li className="text-xs text-zinc-500">…</li>
               ) : null}
-            </li>
-          ))}
-        </ul>
-      </section>
+            </ul>
+          </section>
 
-      <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-          Expenses
-        </h2>
-        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Equal split across selected members. Total:{" "}
-          <strong>{totalSpent(expenses).toFixed(2)}</strong>
-        </p>
-        {!trip.closed && user ? (
-          <form onSubmit={addExpense} className="mt-4 flex flex-col gap-3">
-            <div className="grid gap-3 sm:grid-cols-2">
+          <section>
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+              Timeline
+            </h2>
+            <ol className="mt-4 space-y-3 border-l-2 border-zinc-200 pl-4 dark:border-zinc-700">
+              {timeline.map((ev) => (
+                <li key={ev.id} className="relative text-sm">
+                  <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-emerald-500" />
+                  <TimelineLine
+                    ev={ev}
+                    expenses={expenses}
+                    media={media}
+                    members={members}
+                    memberName={memberName}
+                  />
+                  <time className="mt-0.5 block text-xs text-zinc-500">
+                    {ev.createdAt?.toDate
+                      ? ev.createdAt.toDate().toLocaleString()
+                      : ""}
+                  </time>
+                </li>
+              ))}
+            </ol>
+            {timeline.length === 0 ? (
+              <p className="mt-2 text-sm text-zinc-500">No activity yet.</p>
+            ) : null}
+          </section>
+        </div>
+      )}
+
+      {tab === "expenses" && (
+        <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+            Expenses
+          </h2>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            Equal split across selected members. Total:{" "}
+            <strong>{totalSpent(expenses).toFixed(2)}</strong>
+          </p>
+          {!trip.closed && user ? (
+            <form onSubmit={addExpense} className="mt-4 flex flex-col gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-sm">
+                  <span>Amount</span>
+                  <input
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
+                    placeholder="0.00"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span>Paid by</span>
+                  <select
+                    value={displayPaidBy}
+                    onChange={(e) => setPaidBy(e.target.value)}
+                    className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
+                  >
+                    {members.map((m) => (
+                      <option key={m.userId} value={m.userId}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <fieldset>
+                <legend className="text-sm font-medium">Split between</legend>
+                <div className="mt-2 flex flex-wrap gap-3">
+                  {members.map((m) => (
+                    <label key={m.userId} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={activeSplitIds.includes(m.userId)}
+                        onChange={(e) => {
+                          const base =
+                            splitIds.length > 0
+                              ? [...splitIds]
+                              : members.map((x) => x.userId);
+                          if (e.target.checked) {
+                            setSplitIds([...new Set([...base, m.userId])]);
+                          } else {
+                            setSplitIds(base.filter((id) => id !== m.userId));
+                          }
+                        }}
+                      />
+                      {m.name}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
               <label className="flex flex-col gap-1 text-sm">
-                <span>Amount</span>
+                <span>Category (optional)</span>
                 <input
-                  inputMode="decimal"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
                   className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
-                  placeholder="0.00"
+                  placeholder="Fuel, food, stay…"
                 />
               </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span>Paid by</span>
-                <select
-                  value={displayPaidBy}
-                  onChange={(e) => setPaidBy(e.target.value)}
-                  className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
-                >
-                  {members.map((m) => (
-                    <option key={m.userId} value={m.userId}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <fieldset>
-              <legend className="text-sm font-medium">Split between</legend>
-              <div className="mt-2 flex flex-wrap gap-3">
-                {members.map((m) => (
-                  <label key={m.userId} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={activeSplitIds.includes(m.userId)}
-                      onChange={(e) => {
-                        const base =
-                          splitIds.length > 0
-                            ? [...splitIds]
-                            : members.map((x) => x.userId);
-                        if (e.target.checked) {
-                          setSplitIds([...new Set([...base, m.userId])]);
-                        } else {
-                          setSplitIds(base.filter((id) => id !== m.userId));
-                        }
-                      }}
-                    />
-                    {m.name}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <label className="flex flex-col gap-1 text-sm">
-              <span>Category (optional)</span>
-              <input
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
-                placeholder="Fuel, food, stay…"
-              />
-            </label>
-            {expenseErr ? (
-              <p className="text-sm text-red-600">{expenseErr}</p>
-            ) : null}
-            <button
-              type="submit"
-              disabled={expenseSaving}
-              className="w-fit rounded-full bg-zinc-900 px-5 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
-            >
-              {expenseSaving ? "Saving…" : "Add expense"}
-            </button>
-          </form>
-        ) : null}
-
-        <ul className="mt-6 divide-y divide-zinc-200 dark:divide-zinc-800">
-          {expenses.map((ex) => (
-            <li
-              key={ex.id}
-              className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"
-            >
-              <div>
-                <span className="font-medium">{ex.amount.toFixed(2)}</span>
-                <span className="text-zinc-500">
-                  {" "}
-                  · paid by {memberName(ex.paidBy)}
-                  {ex.category ? ` · ${ex.category}` : ""}
-                </span>
-              </div>
-              {!trip.closed ? (
-                <button
-                  type="button"
-                  onClick={() => removeExpense(ex)}
-                  className="text-xs text-red-600 hover:underline"
-                >
-                  Delete
-                </button>
+              {expenseErr ? (
+                <p className="text-sm text-red-600">{expenseErr}</p>
               ) : null}
-            </li>
-          ))}
-        </ul>
+              <button
+                type="submit"
+                disabled={expenseSaving}
+                className="w-fit rounded-full bg-zinc-900 px-5 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
+              >
+                {expenseSaving ? "Saving…" : "Add expense"}
+              </button>
+            </form>
+          ) : null}
 
-        <div className="mt-6 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-          <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-            Balances
-          </h3>
-          <p className="mt-1 text-xs text-zinc-500">
-            Positive means others owe this person; negative means they owe the
-            group.
-          </p>
-          <ul className="mt-3 space-y-1 text-sm">
-            {trip.memberIds.map((uid) => (
-              <li key={uid} className="flex justify-between gap-4">
-                <span>{memberName(uid)}</span>
-                <span
-                  className={
-                    (balances[uid] ?? 0) >= 0
-                      ? "text-emerald-700 dark:text-emerald-400"
-                      : "text-red-700 dark:text-red-400"
-                  }
-                >
-                  {(balances[uid] ?? 0).toFixed(2)}
-                </span>
+          <ul className="mt-6 divide-y divide-zinc-200 dark:divide-zinc-800">
+            {expenses.map((ex) => (
+              <li
+                key={ex.id}
+                className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm"
+              >
+                <div>
+                  <span className="font-medium">{ex.amount.toFixed(2)}</span>
+                  <span className="text-zinc-500">
+                    {" "}
+                    · paid by {memberName(ex.paidBy)}
+                    {ex.category ? ` · ${ex.category}` : ""}
+                  </span>
+                </div>
+                {!trip.closed ? (
+                  <button
+                    type="button"
+                    onClick={() => removeExpense(ex)}
+                    className="text-xs text-red-600 hover:underline"
+                  >
+                    Delete
+                  </button>
+                ) : null}
               </li>
             ))}
           </ul>
-        </div>
-      </section>
 
-      <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-          Photos
-        </h2>
-        {!trip.closed && user ? (
-          <div className="mt-3">
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-4 py-3 text-sm hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-800">
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                disabled={uploading}
-                onChange={(e) => onPickFile(e.target.files)}
-              />
-              {uploading ? "Uploading…" : "Upload photo"}
-            </label>
-            {uploadErr ? (
-              <p className="mt-2 text-sm text-red-600">{uploadErr}</p>
-            ) : null}
+          <div className="mt-6 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+            <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+              Balances
+            </h3>
+            <p className="mt-1 text-xs text-zinc-500">
+              Positive means others owe this person; negative means they owe the
+              group.
+            </p>
+            <ul className="mt-3 space-y-1 text-sm">
+              {trip.memberIds.map((uid) => (
+                <li key={uid} className="flex justify-between gap-4">
+                  <span>{memberName(uid)}</span>
+                  <span
+                    className={
+                      (balances[uid] ?? 0) >= 0
+                        ? "text-emerald-700 dark:text-emerald-400"
+                        : "text-red-700 dark:text-red-400"
+                    }
+                  >
+                    {(balances[uid] ?? 0).toFixed(2)}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
-        ) : null}
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {media.map((m) => (
-            <figure
-              key={m.id}
-              className="group relative overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={m.url}
-                alt=""
-                className="aspect-square w-full object-cover"
-                loading="lazy"
-              />
-              {!trip.closed ? (
-                <button
-                  type="button"
-                  onClick={() => removeMedia(m)}
-                  className="absolute right-2 top-2 rounded bg-black/60 px-2 py-0.5 text-xs text-white opacity-0 transition group-hover:opacity-100"
-                >
-                  Remove
-                </button>
-              ) : null}
-            </figure>
-          ))}
-        </div>
-      </section>
+        </section>
+      )}
 
-      <section>
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-          Timeline
-        </h2>
-        <ol className="mt-4 space-y-3 border-l-2 border-zinc-200 pl-4 dark:border-zinc-700">
-          {timeline.map((ev) => (
-            <li key={ev.id} className="relative text-sm">
-              <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-emerald-500" />
-              <TimelineLine
-                ev={ev}
-                expenses={expenses}
-                media={media}
-                members={members}
-                memberName={memberName}
-              />
-              <time className="mt-0.5 block text-xs text-zinc-500">
-                {ev.createdAt?.toDate
-                  ? ev.createdAt.toDate().toLocaleString()
-                  : ""}
-              </time>
-            </li>
-          ))}
-        </ol>
-        {timeline.length === 0 ? (
-          <p className="mt-2 text-sm text-zinc-500">No activity yet.</p>
-        ) : null}
-      </section>
+      {tab === "photos" && (
+        <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+            Photos
+          </h2>
+          {!trip.closed && user ? (
+            <div className="mt-3">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-4 py-3 text-sm hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-800">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={(e) => onPickFile(e.target.files)}
+                />
+                {uploading ? "Uploading…" : "Upload photo"}
+              </label>
+              {uploadErr ? (
+                <p className="mt-2 text-sm text-red-600">{uploadErr}</p>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {media.map((m) => (
+              <figure
+                key={m.id}
+                className="group relative overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={m.url}
+                  alt=""
+                  className="aspect-square w-full object-cover"
+                  loading="lazy"
+                />
+                {!trip.closed ? (
+                  <button
+                    type="button"
+                    onClick={() => removeMedia(m)}
+                    className="absolute right-2 top-2 rounded bg-black/60 px-2 py-0.5 text-xs text-white opacity-0 transition group-hover:opacity-100"
+                  >
+                    Remove
+                  </button>
+                ) : null}
+              </figure>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {tab === "route" && user ? (
+        <TripRoutePanel tripId={tripId} trip={trip} user={user} />
+      ) : null}
+
+      {tab === "checklist" && user ? (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+          <TripChecklistPanel
+            tripId={tripId}
+            trip={trip}
+            user={user}
+            members={members}
+          />
+        </div>
+      ) : null}
+
+      {tab === "members" && (
+        <section>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+            Members
+          </h2>
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {members.map((m) => (
+              <li
+                key={m.userId}
+                className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              >
+                {m.name}
+                {m.role === "admin" ? (
+                  <span className="ml-1 text-xs text-emerald-700 dark:text-emerald-400">
+                    (admin)
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

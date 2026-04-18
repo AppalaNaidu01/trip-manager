@@ -3,6 +3,7 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { docSnapToTrip } from "@/lib/firestore-map";
 import { getDb } from "@/lib/firebase/client";
+import { formatTripDateRange } from "@/lib/trip-utils";
 import type { Trip } from "@/types/models";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import Link from "next/link";
@@ -89,10 +90,20 @@ export default function DashboardPage() {
             <li key={t.id}>
               <Link
                 href={`/trips/${t.id}`}
-                className="block rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-emerald-300 hover:shadow dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-emerald-700"
+                className="flex overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:border-emerald-300 hover:shadow dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-emerald-700"
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
+                <div className="relative h-28 w-28 shrink-0 bg-gradient-to-br from-emerald-100 to-zinc-200 dark:from-emerald-950 dark:to-zinc-800">
+                  {t.coverImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={t.coverImageUrl}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : null}
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col justify-center p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
                     <h2 className="font-semibold text-zinc-900 dark:text-zinc-50">
                       {t.name}
                       {t.closed ? (
@@ -101,11 +112,13 @@ export default function DashboardPage() {
                         </span>
                       ) : null}
                     </h2>
-                    <p className="mt-1 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
-                      {t.description || "No description"}
-                    </p>
+                    <span className="shrink-0 text-xs text-zinc-500">
+                      {formatTripDateRange(t)}
+                    </span>
                   </div>
-                  <span className="shrink-0 text-xs text-zinc-500">{t.date}</span>
+                  <p className="mt-1 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
+                    {t.description || "No description"}
+                  </p>
                 </div>
               </Link>
             </li>
