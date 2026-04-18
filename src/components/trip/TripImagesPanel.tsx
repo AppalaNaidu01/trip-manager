@@ -1,11 +1,16 @@
 "use client";
 
-import { getDb, getFirebaseStorage } from "@/lib/firebase/client";
-import type { Trip } from "@/types/models";
+import { getDb } from "@/lib/firebase/client";
+import {
+  deleteDriveFile,
+  tripImageSrcForUi,
+} from "@/lib/google-drive/drive-api";
+import { uploadTripImageToDrive } from "@/lib/google-drive/media-upload";
+import { getGoogleDriveAccessToken } from "@/lib/google-drive/token";
+import type { Trip, TripMember } from "@/types/models";
 import type { User } from "firebase/auth";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -13,15 +18,34 @@ export function TripImagesPanel({
   tripId,
   trip,
   user,
+  members,
 }: {
   tripId: string;
   trip: Trip;
   user: User | null;
+  members: TripMember[];
 }) {
   const [coverBusy, setCoverBusy] = useState(false);
   const [bgBusy, setBgBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const closed = trip.closed === true;
+
+  const coverSrc = tripImageSrcForUi(
+    trip.coverDriveFileId,
+    trip.coverImageUrl,
+  );
+  const backgroundSrc = tripImageSrcForUi(
+    trip.backgroundDriveFileId,
+    trip.backgroundImageUrl,
+  );
+
+  const memberEmails = useMemo(
+    () =>
+      members
+        .map((m) => m.email)
+        .filter((e): e is string => typeof e === "string" && e.length > 0),
+    [members],
+  );
 
   async function upload(
     file: File,
@@ -40,17 +64,21 @@ export function TripImagesPanel({
     setErr(null);
     setBusy(true);
     try {
-      const storage = getFirebaseStorage();
-      const safe = file.name.replace(/\s+/g, "_");
-      const path = `trips/${tripId}/${kind}_${Date.now()}_${safe}`;
-      const sRef = storageRef(storage, path);
-      await uploadBytes(sRef, file);
-      const url = await getDownloadURL(sRef);
+      const prefix = kind === "cover" ? "cover" : "background";
+      const { url, driveFileId } = await uploadTripImageToDrive({
+        trip,
+        tripId,
+        file,
+        nameHint: `${prefix}_${Date.now()}_${file.name}`,
+        memberEmails,
+      });
       const db = getDb();
-      const field =
-        kind === "cover" ? "coverImageUrl" : "backgroundImageUrl";
+      const field = kind === "cover" ? "coverImageUrl" : "backgroundImageUrl";
+      const idField =
+        kind === "cover" ? "coverDriveFileId" : "backgroundDriveFileId";
       await updateDoc(doc(db, "trips", tripId), {
         [field]: url,
+        [idField]: driveFileId,
         updatedAt: serverTimestamp(),
       });
     } catch (e) {
@@ -64,9 +92,20 @@ export function TripImagesPanel({
     if (!user || closed) return;
     setErr(null);
     try {
+      const idField =
+        field === "coverImageUrl" ? "coverDriveFileId" : "backgroundDriveFileId";
+      const fileId =
+        field === "coverImageUrl"
+          ? trip.coverDriveFileId
+          : trip.backgroundDriveFileId;
+      if (fileId) {
+        const token = await getGoogleDriveAccessToken();
+        await deleteDriveFile(token, fileId);
+      }
       const db = getDb();
       await updateDoc(doc(db, "trips", tripId), {
         [field]: null,
+        [idField]: null,
         updatedAt: serverTimestamp(),
       });
     } catch (e) {
@@ -75,13 +114,13 @@ export function TripImagesPanel({
   }
 
   return (
-    <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+    <section className="rounded-2xl border border-slate-200 bg-white/95 p-5 ring-1 ring-black/5">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
         Trip look
       </h2>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+      <p className="mt-2 text-sm text-slate-600">
         Cover appears on cards and the trip header. Background styles the trip
-        dashboard.
+        dashboard. Images are stored in your Google Drive (trip folder).
       </p>
       {err ? (
         <p className="mt-2 text-sm text-red-600" role="alert">
@@ -90,14 +129,12 @@ export function TripImagesPanel({
       ) : null}
       <div className="mt-4 grid gap-6 sm:grid-cols-2">
         <div>
-          <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-            Cover image
-          </p>
-          <div className="mt-2 aspect-[16/9] overflow-hidden rounded-lg border border-zinc-200 bg-gradient-to-br from-emerald-100 to-zinc-200 dark:border-zinc-700 dark:from-emerald-950 dark:to-zinc-900">
-            {trip.coverImageUrl ? (
+          <p className="text-xs font-medium text-slate-600">Cover image</p>
+          <div className="mt-2 aspect-[16/9] overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-br from-emerald-100 to-slate-200">
+            {coverSrc ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={trip.coverImageUrl}
+                src={coverSrc}
                 alt=""
                 className="h-full w-full object-cover"
               />
@@ -105,7 +142,7 @@ export function TripImagesPanel({
           </div>
           {!closed && user ? (
             <div className="mt-2 flex flex-wrap gap-2">
-              <label className="cursor-pointer rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-xs font-medium hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-800">
+              <label className="cursor-pointer rounded-lg border border-dashed border-slate-300/80 bg-white/80 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
                 <input
                   type="file"
                   accept="image/*"
@@ -119,7 +156,7 @@ export function TripImagesPanel({
                 />
                 {coverBusy ? "Uploading…" : "Upload / replace"}
               </label>
-              {trip.coverImageUrl ? (
+              {coverSrc ? (
                 <button
                   type="button"
                   onClick={() => clearField("coverImageUrl")}
@@ -132,14 +169,12 @@ export function TripImagesPanel({
           ) : null}
         </div>
         <div>
-          <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-            Background image
-          </p>
-          <div className="mt-2 aspect-video overflow-hidden rounded-lg border border-zinc-200 bg-gradient-to-br from-zinc-100 to-zinc-300 dark:border-zinc-700 dark:from-zinc-800 dark:to-zinc-950">
-            {trip.backgroundImageUrl ? (
+          <p className="text-xs font-medium text-slate-600">Background image</p>
+          <div className="mt-2 aspect-video overflow-hidden rounded-lg border border-slate-200 bg-gradient-to-br from-emerald-50/80 to-slate-200">
+            {backgroundSrc ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={trip.backgroundImageUrl}
+                src={backgroundSrc}
                 alt=""
                 className="h-full w-full object-cover opacity-90"
               />
@@ -147,7 +182,7 @@ export function TripImagesPanel({
           </div>
           {!closed && user ? (
             <div className="mt-2 flex flex-wrap gap-2">
-              <label className="cursor-pointer rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-xs font-medium hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-800">
+              <label className="cursor-pointer rounded-lg border border-dashed border-slate-300/80 bg-white/80 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
                 <input
                   type="file"
                   accept="image/*"
@@ -161,7 +196,7 @@ export function TripImagesPanel({
                 />
                 {bgBusy ? "Uploading…" : "Upload / replace"}
               </label>
-              {trip.backgroundImageUrl ? (
+              {backgroundSrc ? (
                 <button
                   type="button"
                   onClick={() => clearField("backgroundImageUrl")}

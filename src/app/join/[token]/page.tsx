@@ -83,9 +83,12 @@ export default function JoinTripPage() {
 
   if (configError) {
     return (
-      <div className="mx-auto max-w-md p-8 text-center">
-        <p className="font-medium">Firebase is not configured</p>
-        <Link href="/" className="mt-4 inline-block text-emerald-700 underline">
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-white px-4 py-10 text-center">
+        <p className="font-medium text-[#0f172a]">Firebase is not configured</p>
+        <Link
+          href="/"
+          className="mt-4 text-sm font-medium text-emerald-800 underline underline-offset-2"
+        >
           Home
         </Link>
       </div>
@@ -94,9 +97,12 @@ export default function JoinTripPage() {
 
   if (lookupError) {
     return (
-      <div className="mx-auto max-w-md p-8 text-center">
-        <p className="text-red-600 dark:text-red-400">{lookupError}</p>
-        <Link href="/" className="mt-4 inline-block text-sm underline">
+      <div className="flex min-h-dvh flex-col items-center justify-center bg-white px-4 py-10 text-center">
+        <p className="text-red-600">{lookupError}</p>
+        <Link
+          href="/"
+          className="mt-4 text-sm text-slate-600 underline underline-offset-2"
+        >
           Home
         </Link>
       </div>
@@ -105,62 +111,56 @@ export default function JoinTripPage() {
 
   if (tripName === null && !lookupError) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <p className="text-sm text-zinc-500">Loading invite…</p>
+      <div className="flex min-h-dvh items-center justify-center bg-white">
+        <p className="text-sm text-slate-500">Loading invite…</p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-4 py-12">
-      <h1 className="text-center text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-        Join trip
-      </h1>
-      <p className="mt-2 text-center text-zinc-600 dark:text-zinc-400">
-        You have been invited to <strong>{tripName}</strong>.
-      </p>
-
-      {authLoading ? (
-        <p className="mt-8 text-center text-sm text-zinc-500">
-          Checking account…
+    <div className="flex min-h-dvh w-full flex-col items-center justify-center bg-white px-4 py-12">
+      <div className="w-full max-w-md text-center">
+        <h1 className="text-2xl font-semibold text-[#0f172a]">Join trip</h1>
+        <p className="mt-2 text-slate-600">
+          You have been invited to <strong>{tripName}</strong>.
         </p>
-      ) : !user ? (
-        <div className="mt-8 flex flex-col items-center gap-4">
-          <p className="text-center text-sm text-zinc-600 dark:text-zinc-400">
-            Sign in with Google to join.
-          </p>
-          <button
-            type="button"
-            onClick={() => signInWithGoogle()}
-            className="rounded-full bg-zinc-900 px-6 py-3 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            Continue with Google
-          </button>
-        </div>
-      ) : (
-        <div className="mt-8 flex flex-col items-center gap-4">
-          {joinError ? (
-            <p className="text-center text-sm text-red-600 dark:text-red-400">
-              {joinError}
-            </p>
-          ) : null}
-          <button
-            type="button"
-            disabled={joining || !tripId}
-            onClick={() => join()}
-            className="rounded-full bg-emerald-600 px-8 py-3 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
-          >
-            {joining ? "Joining…" : "Join this trip"}
-          </button>
-        </div>
-      )}
 
-      <Link
-        href="/"
-        className="mt-10 block text-center text-sm text-zinc-500 hover:underline"
-      >
-        Back to home
-      </Link>
+        {authLoading ? (
+          <p className="mt-8 text-sm text-slate-500">Checking account…</p>
+        ) : !user ? (
+          <div className="mt-8 flex flex-col items-center gap-4">
+            <p className="text-sm text-slate-600">Sign in with Google to join.</p>
+            <button
+              type="button"
+              onClick={() => signInWithGoogle()}
+              className="rounded-2xl border border-slate-300/80 bg-white px-6 py-3 text-sm font-semibold text-slate-700 shadow-[0_4px_14px_rgba(15,23,42,0.12)] ring-1 ring-slate-200/80 transition hover:bg-slate-50"
+            >
+              Continue with Google
+            </button>
+          </div>
+        ) : (
+          <div className="mt-8 flex flex-col items-center gap-4">
+            {joinError ? (
+              <p className="text-sm text-red-600">{joinError}</p>
+            ) : null}
+            <button
+              type="button"
+              disabled={joining || !tripId}
+              onClick={() => join()}
+              className="rounded-2xl bg-emerald-800 px-8 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-800/35 transition hover:brightness-110 disabled:opacity-50"
+            >
+              {joining ? "Joining…" : "Join this trip"}
+            </button>
+          </div>
+        )}
+
+        <Link
+          href="/"
+          className="mt-10 block text-sm text-slate-500 transition hover:text-slate-800"
+        >
+          Back to home
+        </Link>
+      </div>
     </div>
   );
 }

@@ -1,23 +1,72 @@
 "use client";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { useDashboardSearch } from "@/contexts/DashboardSearchContext";
 import { docSnapToTrip } from "@/lib/firestore-map";
 import { getDb } from "@/lib/firebase/client";
-import { formatTripDateRange } from "@/lib/trip-utils";
+import {
+  formatRelativeFirestore,
+  formatTripDateRangeShort,
+  tripListEmoji,
+  tripListGradientClass,
+} from "@/lib/trip-utils";
+import { tripImageSrcForUi } from "@/lib/google-drive/drive-api";
 import type { Trip } from "@/types/models";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  query as firestoreQuery,
+  where,
+} from "firebase/firestore";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+function CalendarIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      aria-hidden
+    >
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+function PeopleIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      aria-hidden
+    >
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { query } = useDashboardSearch();
   const [trips, setTrips] = useState<Trip[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
     const db = getDb();
-    const q = query(
+    const q = firestoreQuery(
       collection(db, "trips"),
       where("memberIds", "array-contains", user.uid),
     );
@@ -26,8 +75,8 @@ export default function DashboardPage() {
       (snap) => {
         const list = snap.docs.map(docSnapToTrip);
         list.sort((a, b) => {
-          const ta = a.createdAt?.toMillis?.() ?? 0;
-          const tb = b.createdAt?.toMillis?.() ?? 0;
+          const ta = a.updatedAt?.toMillis?.() ?? a.createdAt?.toMillis?.() ?? 0;
+          const tb = b.updatedAt?.toMillis?.() ?? b.createdAt?.toMillis?.() ?? 0;
           return tb - ta;
         });
         setTrips(list);
@@ -41,28 +90,21 @@ export default function DashboardPage() {
     return () => unsub();
   }, [user]);
 
-  return (
-    <div className="flex flex-1 flex-col gap-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-            Your trips
-          </h1>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            Create a trip or open one you have joined.
-          </p>
-        </div>
-        <Link
-          href="/trips/new"
-          className="rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow hover:bg-emerald-500"
-        >
-          New trip
-        </Link>
-      </div>
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return trips;
+    return trips.filter(
+      (t) =>
+        t.name.toLowerCase().includes(q) ||
+        t.description.toLowerCase().includes(q),
+    );
+  }, [trips, query]);
 
+  return (
+    <div className="flex w-full flex-col">
       {error && (
         <div
-          className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+          className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"
           role="alert"
         >
           <p className="font-medium">Could not load trips</p>
@@ -74,55 +116,94 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {trips.length === 0 && !error ? (
-        <div className="rounded-2xl border border-dashed border-zinc-300 bg-white p-12 text-center dark:border-zinc-700 dark:bg-zinc-900/50">
-          <p className="text-zinc-600 dark:text-zinc-400">No trips yet.</p>
-          <Link
-            href="/trips/new"
-            className="mt-4 inline-block text-sm font-semibold text-emerald-700 underline dark:text-emerald-400"
-          >
-            Create your first trip
-          </Link>
+      {filtered.length === 0 && !error ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <p className="text-slate-500">
+            {trips.length === 0
+              ? "No trips yet."
+              : "No trips match your search."}
+          </p>
+          {trips.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-400">
+              Tap the + button to create one.
+            </p>
+          ) : null}
         </div>
       ) : (
-        <ul className="flex flex-col gap-3">
-          {trips.map((t) => (
-            <li key={t.id}>
-              <Link
-                href={`/trips/${t.id}`}
-                className="flex overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:border-emerald-300 hover:shadow dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-emerald-700"
-              >
-                <div className="relative h-28 w-28 shrink-0 bg-gradient-to-br from-emerald-100 to-zinc-200 dark:from-emerald-950 dark:to-zinc-800">
-                  {t.coverImageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={t.coverImageUrl}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  ) : null}
-                </div>
-                <div className="flex min-w-0 flex-1 flex-col justify-center p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <h2 className="font-semibold text-zinc-900 dark:text-zinc-50">
-                      {t.name}
-                      {t.closed ? (
-                        <span className="ml-2 text-xs font-normal text-zinc-500">
-                          (closed)
+        <ul className="divide-y divide-slate-100">
+          {filtered.map((t) => {
+            const when = formatRelativeFirestore(t.updatedAt ?? t.createdAt);
+            const emoji = tripListEmoji(t.id);
+            const grad = tripListGradientClass(t.id);
+            const sub =
+              t.description.trim() ||
+              (t.closed ? "Trip closed" : "Open to see activity");
+            const thumbSrc = tripImageSrcForUi(
+              t.coverDriveFileId,
+              t.coverImageUrl,
+            );
+            return (
+              <li key={t.id}>
+                <Link
+                  href={`/trips/${t.id}`}
+                  className="block py-4 transition-colors hover:bg-slate-50/80 active:bg-slate-100/80"
+                >
+                  <div className="flex gap-3">
+                    <div
+                      className={`relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br ${grad} text-2xl shadow-inner ring-2 ring-white`}
+                    >
+                      {thumbSrc ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={thumbSrc}
+                          alt=""
+                          className="absolute inset-0 h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span aria-hidden>{emoji}</span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <h2 className="font-semibold leading-tight text-[#0f172a]">
+                          {t.name}
+                          {t.closed ? (
+                            <span className="ml-1.5 text-xs font-normal text-slate-400">
+                              · closed
+                            </span>
+                          ) : null}
+                        </h2>
+                        {when ? (
+                          <time
+                            className="shrink-0 text-xs text-slate-400"
+                            dateTime={
+                              t.updatedAt?.toDate?.()?.toISOString() ??
+                              t.createdAt?.toDate?.()?.toISOString()
+                            }
+                          >
+                            {when}
+                          </time>
+                        ) : null}
+                      </div>
+                      <p className="mt-0.5 line-clamp-2 text-sm text-slate-500">
+                        {sub}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                        <span className="inline-flex items-center gap-1">
+                          <CalendarIcon className="h-3.5 w-3.5 opacity-80" />
+                          {formatTripDateRangeShort(t)}
                         </span>
-                      ) : null}
-                    </h2>
-                    <span className="shrink-0 text-xs text-zinc-500">
-                      {formatTripDateRange(t)}
-                    </span>
+                        <span className="inline-flex items-center gap-1">
+                          <PeopleIcon className="h-3.5 w-3.5 opacity-80" />
+                          {t.memberIds.length}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <p className="mt-1 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
-                    {t.description || "No description"}
-                  </p>
-                </div>
-              </Link>
-            </li>
-          ))}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

@@ -35,6 +35,18 @@ export function mapTrip(
       data.backgroundImageUrl != null
         ? String(data.backgroundImageUrl)
         : null,
+    driveFolderId:
+      data.driveFolderId != null ? String(data.driveFolderId) : null,
+    driveFolderWebViewLink:
+      data.driveFolderWebViewLink != null
+        ? String(data.driveFolderWebViewLink)
+        : null,
+    coverDriveFileId:
+      data.coverDriveFileId != null ? String(data.coverDriveFileId) : null,
+    backgroundDriveFileId:
+      data.backgroundDriveFileId != null
+        ? String(data.backgroundDriveFileId)
+        : null,
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   };
@@ -81,6 +93,8 @@ export function mapMedia(
     id,
     tripId,
     url: String(data.url ?? ""),
+    driveFileId:
+      data.driveFileId != null ? String(data.driveFileId) : null,
     uploadedBy: String(data.uploadedBy ?? ""),
     createdAt: data.createdAt,
   };

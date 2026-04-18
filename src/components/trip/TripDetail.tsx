@@ -8,7 +8,7 @@ import {
   mapTimeline,
   mapTrip,
 } from "@/lib/firestore-map";
-import { getDb, getFirebaseStorage } from "@/lib/firebase/client";
+import { getDb } from "@/lib/firebase/client";
 import { computeBalances, formatTripDateRange, totalSpent } from "@/lib/trip-utils";
 import type { Expense, MediaItem, TimelineEvent, Trip, TripMember } from "@/types/models";
 import {
@@ -21,7 +21,12 @@ import {
   query,
   orderBy,
 } from "firebase/firestore";
-import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import {
+  deleteDriveFile,
+  tripImageSrcForUi,
+} from "@/lib/google-drive/drive-api";
+import { getGoogleDriveAccessToken } from "@/lib/google-drive/token";
+import { uploadTripImageToDrive } from "@/lib/google-drive/media-upload";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -249,6 +254,14 @@ export function TripDetail() {
     }
   }
 
+  const memberEmails = useMemo(
+    () =>
+      members
+        .map((m) => m.email)
+        .filter((e): e is string => typeof e === "string" && e.length > 0),
+    [members],
+  );
+
   async function onPickFile(f: FileList | null) {
     if (!user || !trip || trip.closed || !f?.length) return;
     const file = f[0];
@@ -260,16 +273,19 @@ export function TripDetail() {
     setUploadErr(null);
     try {
       const db = getDb();
-      const storage = getFirebaseStorage();
       const mediaRef = doc(collection(db, "trips", tripId, "media"));
       const mediaId = mediaRef.id;
-      const path = `trips/${tripId}/${mediaId}_${file.name.replace(/\s+/g, "_")}`;
-      const sRef = storageRef(storage, path);
-      await uploadBytes(sRef, file);
-      const url = await getDownloadURL(sRef);
+      const { url, driveFileId } = await uploadTripImageToDrive({
+        trip,
+        tripId,
+        file,
+        nameHint: `photo_${mediaId}_${file.name}`,
+        memberEmails,
+      });
       const batch = writeBatch(db);
       batch.set(mediaRef, {
         url,
+        driveFileId,
         uploadedBy: user.uid,
         createdAt: serverTimestamp(),
       });
@@ -294,6 +310,10 @@ export function TripDetail() {
     if (!trip || trip.closed) return;
     if (!confirm("Remove this photo from the trip?")) return;
     try {
+      if (item.driveFileId) {
+        const token = await getGoogleDriveAccessToken();
+        await deleteDriveFile(token, item.driveFileId);
+      }
       const db = getDb();
       const batch = writeBatch(db);
       batch.delete(doc(db, "trips", tripId, "media", item.id));
@@ -309,7 +329,7 @@ export function TripDetail() {
 
   if (loadError && !trip) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+      <div className="rounded-xl border border-red-200 bg-red-50 p-6 text-red-900">
         <p>{loadError}</p>
         <Link href="/dashboard" className="mt-4 inline-block text-sm underline">
           Back to trips
@@ -319,15 +339,26 @@ export function TripDetail() {
   }
 
   if (!trip) {
-    return <p className="text-sm text-zinc-500">Loading trip…</p>;
+    return <p className="text-sm text-slate-500">Loading trip…</p>;
   }
 
   const memberName = (uid: string) =>
     members.find((m) => m.userId === uid)?.name ?? uid.slice(0, 8);
 
-  const shellStyle: CSSProperties | undefined = trip.backgroundImageUrl
+  const coverSrc = tripImageSrcForUi(
+    trip.coverDriveFileId,
+    trip.coverImageUrl,
+  );
+  const hasCover = Boolean(coverSrc);
+
+  const backgroundSrc = tripImageSrcForUi(
+    trip.backgroundDriveFileId,
+    trip.backgroundImageUrl,
+  );
+
+  const shellStyle: CSSProperties | undefined = backgroundSrc
     ? {
-        backgroundImage: `linear-gradient(rgba(255,255,255,0.88), rgba(255,255,255,0.92)), url(${trip.backgroundImageUrl})`,
+        backgroundImage: `linear-gradient(rgba(255,255,255,0.88), rgba(255,255,255,0.92)), url(${backgroundSrc})`,
         backgroundSize: "cover",
         backgroundPosition: "center",
       }
@@ -341,29 +372,29 @@ export function TripDetail() {
       <div>
         <Link
           href="/dashboard"
-          className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
+          className="text-sm text-slate-500 hover:text-slate-800"
         >
           ← Trips
         </Link>
 
         <div
-          className={`relative mt-3 overflow-hidden rounded-2xl border border-zinc-200 bg-gradient-to-br from-emerald-50 to-zinc-100 dark:border-zinc-800 dark:from-emerald-950/40 dark:to-zinc-900 ${
-            trip.coverImageUrl ? "min-h-[140px] sm:min-h-[180px]" : "min-h-0"
+          className={`relative mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-emerald-50 to-teal-50 ring-1 ring-black/5 ${
+            hasCover ? "min-h-[140px] sm:min-h-[180px]" : "min-h-0"
           }`}
         >
-          {trip.coverImageUrl ? (
+          {hasCover && coverSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={trip.coverImageUrl}
+              src={coverSrc}
               alt=""
               className="absolute inset-0 h-full w-full object-cover"
             />
           ) : null}
           <div
             className={`relative p-4 sm:p-6 ${
-              trip.coverImageUrl
+              hasCover
                 ? "bg-black/45 text-white"
-                : "text-zinc-900 dark:text-zinc-50"
+                : "text-[#0f172a]"
             }`}
           >
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -377,7 +408,7 @@ export function TripDetail() {
                 {trip.description ? (
                   <p
                     className={`mt-3 max-w-2xl text-sm ${
-                      trip.coverImageUrl ? "text-white/95" : "text-zinc-700 dark:text-zinc-300"
+                      hasCover ? "text-white/95" : "text-slate-700"
                     }`}
                   >
                     {trip.description}
@@ -385,7 +416,7 @@ export function TripDetail() {
                 ) : null}
               </div>
               {trip.closed ? (
-                <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white backdrop-blur dark:bg-black/30">
+                <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-medium text-white backdrop-blur">
                   Closed
                 </span>
               ) : isAdmin ? (
@@ -407,44 +438,44 @@ export function TripDetail() {
       {tab === "overview" && (
         <div className="flex flex-col gap-8">
           {user ? (
-            <TripImagesPanel tripId={tripId} trip={trip} user={user} />
+            <TripImagesPanel tripId={tripId} trip={trip} user={user} members={members} />
           ) : null}
 
-          <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+          <section className="rounded-2xl border border-slate-200 bg-white/95 p-5 ring-1 ring-black/5">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
               Invite link
             </h2>
-            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="mt-2 text-sm text-slate-600">
               Share this link so friends can join after signing in with Google.
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <code className="max-w-full flex-1 truncate rounded-lg bg-zinc-100 px-3 py-2 text-xs text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200">
+              <code className="max-w-full flex-1 truncate rounded-lg bg-slate-100 px-3 py-2 text-xs text-[#0f172a]">
                 {inviteUrl || "…"}
               </code>
               <button
                 type="button"
                 onClick={() => copyInvite()}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500"
+                className="rounded-lg bg-emerald-800 px-4 py-2 text-xs font-semibold text-white hover:brightness-110"
               >
                 {copied ? "Copied" : "Copy"}
               </button>
             </div>
           </section>
 
-          <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+          <section className="rounded-2xl border border-slate-200 bg-white/95 p-5 ring-1 ring-black/5">
             <div className="flex flex-wrap items-end justify-between gap-2">
-              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+              <h2 className="text-lg font-semibold text-[#0f172a]">
                 Balances snapshot
               </h2>
               <button
                 type="button"
                 onClick={() => setTab("expenses")}
-                className="text-sm font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+                className="text-sm font-medium text-emerald-800 hover:underline"
               >
                 View expenses
               </button>
             </div>
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="mt-1 text-sm text-slate-600">
               Total spent:{" "}
               <strong>{totalSpent(expenses).toFixed(2)}</strong>
             </p>
@@ -455,8 +486,8 @@ export function TripDetail() {
                   <span
                     className={
                       (balances[uid] ?? 0) >= 0
-                        ? "text-emerald-700 dark:text-emerald-400"
-                        : "text-red-700 dark:text-red-400"
+                        ? "text-emerald-800"
+                        : "text-red-700"
                     }
                   >
                     {(balances[uid] ?? 0).toFixed(2)}
@@ -464,19 +495,17 @@ export function TripDetail() {
                 </li>
               ))}
               {trip.memberIds.length > 5 ? (
-                <li className="text-xs text-zinc-500">…</li>
+                <li className="text-xs text-slate-500">…</li>
               ) : null}
             </ul>
           </section>
 
           <section>
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-              Timeline
-            </h2>
-            <ol className="mt-4 space-y-3 border-l-2 border-zinc-200 pl-4 dark:border-zinc-700">
+            <h2 className="text-lg font-semibold text-[#0f172a]">Timeline</h2>
+            <ol className="mt-4 space-y-3 border-l-2 border-slate-200 pl-4">
               {timeline.map((ev) => (
                 <li key={ev.id} className="relative text-sm">
-                  <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-emerald-500" />
+                  <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-emerald-800" />
                   <TimelineLine
                     ev={ev}
                     expenses={expenses}
@@ -484,7 +513,7 @@ export function TripDetail() {
                     members={members}
                     memberName={memberName}
                   />
-                  <time className="mt-0.5 block text-xs text-zinc-500">
+                  <time className="mt-0.5 block text-xs text-slate-500">
                     {ev.createdAt?.toDate
                       ? ev.createdAt.toDate().toLocaleString()
                       : ""}
@@ -493,18 +522,16 @@ export function TripDetail() {
               ))}
             </ol>
             {timeline.length === 0 ? (
-              <p className="mt-2 text-sm text-zinc-500">No activity yet.</p>
+              <p className="mt-2 text-sm text-slate-500">No activity yet.</p>
             ) : null}
           </section>
         </div>
       )}
 
       {tab === "expenses" && (
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-            Expenses
-          </h2>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+        <section className="rounded-2xl border border-slate-200 bg-white/95 p-5 ring-1 ring-black/5">
+          <h2 className="text-lg font-semibold text-[#0f172a]">Expenses</h2>
+          <p className="mt-1 text-sm text-slate-600">
             Equal split across selected members. Total:{" "}
             <strong>{totalSpent(expenses).toFixed(2)}</strong>
           </p>
@@ -517,7 +544,7 @@ export function TripDetail() {
                     inputMode="decimal"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
+                    className="rounded-lg border border-slate-300/80 bg-white px-3 py-2 text-[#0f172a] shadow-sm ring-1 ring-black/5"
                     placeholder="0.00"
                   />
                 </label>
@@ -526,7 +553,7 @@ export function TripDetail() {
                   <select
                     value={displayPaidBy}
                     onChange={(e) => setPaidBy(e.target.value)}
-                    className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
+                    className="rounded-lg border border-slate-300/80 bg-white px-3 py-2 text-[#0f172a] shadow-sm ring-1 ring-black/5"
                   >
                     {members.map((m) => (
                       <option key={m.userId} value={m.userId}>
@@ -566,7 +593,7 @@ export function TripDetail() {
                 <input
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
+                  className="rounded-lg border border-slate-300/80 bg-white px-3 py-2 text-[#0f172a] shadow-sm ring-1 ring-black/5"
                   placeholder="Fuel, food, stay…"
                 />
               </label>
@@ -576,14 +603,14 @@ export function TripDetail() {
               <button
                 type="submit"
                 disabled={expenseSaving}
-                className="w-fit rounded-full bg-zinc-900 px-5 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
+                className="w-fit rounded-2xl bg-[#0f172a] px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
               >
                 {expenseSaving ? "Saving…" : "Add expense"}
               </button>
             </form>
           ) : null}
 
-          <ul className="mt-6 divide-y divide-zinc-200 dark:divide-zinc-800">
+          <ul className="mt-6 divide-y divide-slate-200">
             {expenses.map((ex) => (
               <li
                 key={ex.id}
@@ -591,7 +618,7 @@ export function TripDetail() {
               >
                 <div>
                   <span className="font-medium">{ex.amount.toFixed(2)}</span>
-                  <span className="text-zinc-500">
+                  <span className="text-slate-500">
                     {" "}
                     · paid by {memberName(ex.paidBy)}
                     {ex.category ? ` · ${ex.category}` : ""}
@@ -610,11 +637,9 @@ export function TripDetail() {
             ))}
           </ul>
 
-          <div className="mt-6 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-            <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-              Balances
-            </h3>
-            <p className="mt-1 text-xs text-zinc-500">
+          <div className="mt-6 border-t border-slate-200 pt-4">
+            <h3 className="text-sm font-semibold text-[#0f172a]">Balances</h3>
+            <p className="mt-1 text-xs text-slate-500">
               Positive means others owe this person; negative means they owe the
               group.
             </p>
@@ -625,8 +650,8 @@ export function TripDetail() {
                   <span
                     className={
                       (balances[uid] ?? 0) >= 0
-                        ? "text-emerald-700 dark:text-emerald-400"
-                        : "text-red-700 dark:text-red-400"
+                        ? "text-emerald-800"
+                        : "text-red-700"
                     }
                   >
                     {(balances[uid] ?? 0).toFixed(2)}
@@ -639,13 +664,11 @@ export function TripDetail() {
       )}
 
       {tab === "photos" && (
-        <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-            Photos
-          </h2>
+        <section className="rounded-2xl border border-slate-200 bg-white/95 p-5 ring-1 ring-black/5">
+          <h2 className="text-lg font-semibold text-[#0f172a]">Photos</h2>
           {!trip.closed && user ? (
             <div className="mt-3">
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-4 py-3 text-sm hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-800">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300/80 bg-white/80 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
                 <input
                   type="file"
                   accept="image/*"
@@ -664,11 +687,11 @@ export function TripDetail() {
             {media.map((m) => (
               <figure
                 key={m.id}
-                className="group relative overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800"
+                className="group relative overflow-hidden rounded-lg border border-slate-200"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={m.url}
+                  src={tripImageSrcForUi(m.driveFileId, m.url) ?? m.url}
                   alt=""
                   className="aspect-square w-full object-cover"
                   loading="lazy"
@@ -693,7 +716,7 @@ export function TripDetail() {
       ) : null}
 
       {tab === "checklist" && user ? (
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="rounded-2xl border border-slate-200 bg-white/95 p-5 ring-1 ring-black/5">
           <TripChecklistPanel
             tripId={tripId}
             trip={trip}
@@ -705,20 +728,16 @@ export function TripDetail() {
 
       {tab === "members" && (
         <section>
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-            Members
-          </h2>
+          <h2 className="text-lg font-semibold text-[#0f172a]">Members</h2>
           <ul className="mt-3 flex flex-wrap gap-2">
             {members.map((m) => (
               <li
                 key={m.userId}
-                className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                className="rounded-full border border-slate-200 bg-white/95 px-3 py-1 text-sm ring-1 ring-black/5"
               >
                 {m.name}
                 {m.role === "admin" ? (
-                  <span className="ml-1 text-xs text-emerald-700 dark:text-emerald-400">
-                    (admin)
-                  </span>
+                  <span className="ml-1 text-xs text-emerald-800">(admin)</span>
                 ) : null}
               </li>
             ))}

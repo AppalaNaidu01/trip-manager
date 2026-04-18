@@ -110,28 +110,32 @@ export function TripRoutePanel({
   }
 
   if (loading) {
-    return <p className="text-sm text-zinc-500">Loading route…</p>;
+    return <p className="text-sm text-slate-500">Loading route…</p>;
   }
+
+  const field =
+    "rounded-lg border border-slate-300/80 bg-white px-3 py-2 text-sm text-[#0f172a] shadow-sm ring-1 ring-black/5";
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-          Route plan
-        </h2>
-        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+        <h2 className="text-lg font-semibold text-[#0f172a]">Route plan</h2>
+        <p className="mt-1 text-sm text-slate-600">
           Manual entry — maps integration comes later.
         </p>
       </div>
 
       {!closed && user ? (
-        <form onSubmit={save} className="space-y-4 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <form
+          onSubmit={save}
+          className="space-y-4 rounded-xl border border-slate-200 bg-white/95 p-4 ring-1 ring-black/5"
+        >
           <label className="flex flex-col gap-1 text-sm">
             Start
             <input
               value={startLocation}
               onChange={(e) => setStartLocation(e.target.value)}
-              className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
+              className={field}
               placeholder="City or address"
             />
           </label>
@@ -140,7 +144,7 @@ export function TripRoutePanel({
             <input
               value={destination}
               onChange={(e) => setDestination(e.target.value)}
-              className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
+              className={field}
             />
           </label>
           <div>
@@ -149,7 +153,7 @@ export function TripRoutePanel({
               <button
                 type="button"
                 onClick={addStop}
-                className="text-sm text-emerald-700 hover:underline dark:text-emerald-400"
+                className="text-sm font-medium text-emerald-800 hover:underline"
               >
                 + Add stop
               </button>
@@ -158,13 +162,13 @@ export function TripRoutePanel({
               {stops.map((stop, i) => (
                 <li
                   key={i}
-                  className="flex flex-col gap-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-700"
+                  className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white/80 p-3"
                 >
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-zinc-500">#{i + 1}</span>
+                    <span className="text-xs text-slate-500">#{i + 1}</span>
                     <button
                       type="button"
-                      className="text-xs text-zinc-600"
+                      className="text-xs text-slate-600"
                       onClick={() => moveStop(i, -1)}
                       disabled={i === 0}
                     >
@@ -172,7 +176,7 @@ export function TripRoutePanel({
                     </button>
                     <button
                       type="button"
-                      className="text-xs text-zinc-600"
+                      className="text-xs text-slate-600"
                       onClick={() => moveStop(i, 1)}
                       disabled={i === stops.length - 1}
                     >
@@ -190,7 +194,7 @@ export function TripRoutePanel({
                     value={stop.name}
                     onChange={(e) => updateStop(i, { name: e.target.value })}
                     placeholder="Stop name"
-                    className="rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-950"
+                    className={field}
                   />
                   <input
                     value={stop.notes ?? ""}
@@ -200,7 +204,7 @@ export function TripRoutePanel({
                       })
                     }
                     placeholder="Notes (optional)"
-                    className="rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-600 dark:bg-zinc-950"
+                    className={field}
                   />
                 </li>
               ))}
@@ -213,7 +217,7 @@ export function TripRoutePanel({
                 value={distanceText}
                 onChange={(e) => setDistanceText(e.target.value)}
                 placeholder="e.g. 120 km"
-                className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
+                className={field}
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">
@@ -222,7 +226,7 @@ export function TripRoutePanel({
                 value={durationText}
                 onChange={(e) => setDurationText(e.target.value)}
                 placeholder="e.g. 3 hours"
-                className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
+                className={field}
               />
             </label>
           </div>
@@ -232,38 +236,42 @@ export function TripRoutePanel({
               value={routeNotes}
               onChange={(e) => setRouteNotes(e.target.value)}
               rows={3}
-              className="rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-950"
+              className={field}
             />
           </label>
           <button
             type="submit"
             disabled={saving}
-            className="rounded-full bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+            className="rounded-2xl bg-emerald-800 px-5 py-2 text-sm font-semibold text-white shadow-sm hover:brightness-110 disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save route"}
           </button>
         </form>
       ) : (
-        <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+        <div className="rounded-xl border border-slate-200 bg-white/70 p-4 ring-1 ring-black/5">
           <dl className="grid gap-3 text-sm">
             <div>
-              <dt className="text-zinc-500">Start</dt>
-              <dd className="font-medium">{route?.startLocation || "—"}</dd>
+              <dt className="text-slate-500">Start</dt>
+              <dd className="font-medium text-[#0f172a]">
+                {route?.startLocation || "—"}
+              </dd>
             </div>
             <div>
-              <dt className="text-zinc-500">Destination</dt>
-              <dd className="font-medium">{route?.destination || "—"}</dd>
+              <dt className="text-slate-500">Destination</dt>
+              <dd className="font-medium text-[#0f172a]">
+                {route?.destination || "—"}
+              </dd>
             </div>
             {route?.stops?.length ? (
               <div>
-                <dt className="text-zinc-500">Stops</dt>
+                <dt className="text-slate-500">Stops</dt>
                 <dd>
                   <ol className="mt-1 list-decimal pl-5">
                     {route.stops.map((s, i) => (
                       <li key={i}>
                         {s.name}
                         {s.notes ? (
-                          <span className="text-zinc-500"> — {s.notes}</span>
+                          <span className="text-slate-500"> — {s.notes}</span>
                         ) : null}
                       </li>
                     ))}
@@ -273,17 +281,17 @@ export function TripRoutePanel({
             ) : null}
             <div className="grid gap-2 sm:grid-cols-2">
               <div>
-                <dt className="text-zinc-500">Distance</dt>
+                <dt className="text-slate-500">Distance</dt>
                 <dd>{route?.distanceText || "—"}</dd>
               </div>
               <div>
-                <dt className="text-zinc-500">Duration</dt>
+                <dt className="text-slate-500">Duration</dt>
                 <dd>{route?.durationText || "—"}</dd>
               </div>
             </div>
             {route?.routeNotes ? (
               <div>
-                <dt className="text-zinc-500">Notes</dt>
+                <dt className="text-slate-500">Notes</dt>
                 <dd className="whitespace-pre-wrap">{route.routeNotes}</dd>
               </div>
             ) : null}

@@ -13,6 +13,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+const inputClass =
+  "rounded-xl border border-slate-300/80 bg-white px-3 py-2 text-[#0f172a] shadow-sm ring-1 ring-black/5 placeholder:text-slate-400";
+
 export default function NewTripPage() {
   const { user } = useAuth();
   const router = useRouter();
@@ -79,71 +82,63 @@ export default function NewTripPage() {
     <div className="mx-auto w-full max-w-lg">
       <Link
         href="/dashboard"
-        className="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
+        className="text-sm text-slate-500 hover:text-slate-800"
       >
         ← Back to trips
       </Link>
-      <h1 className="mt-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-        New trip
-      </h1>
+      <h1 className="mt-4 text-2xl font-semibold text-[#0f172a]">New trip</h1>
       <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-5">
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Name
-          </span>
+          <span className="text-sm font-medium text-slate-700">Name</span>
           <input
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+            className={inputClass}
             placeholder="Weekend ride to the coast"
           />
         </label>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Start date
-            </span>
+            <span className="text-sm font-medium text-slate-700">Start date</span>
             <input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+              className={inputClass}
             />
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <span className="text-sm font-medium text-slate-700">
               End date (optional)
             </span>
             <input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+              className={inputClass}
             />
           </label>
         </div>
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Description
-          </span>
+          <span className="text-sm font-medium text-slate-700">Description</span>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             rows={4}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+            className={inputClass}
             placeholder="Optional details for your group"
           />
         </label>
         {error && (
-          <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+          <p className="text-sm text-red-600" role="alert">
             {error}
           </p>
         )}
         <button
           type="submit"
           disabled={saving}
-          className="rounded-full bg-emerald-600 py-3 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50"
+          className="rounded-2xl bg-emerald-800 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-800/35 transition hover:brightness-110 disabled:opacity-50"
         >
           {saving ? "Creating…" : "Create trip"}
         </button>

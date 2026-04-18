@@ -120,19 +120,17 @@ export function TripChecklistPanel({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-          Packing and tasks
-        </h2>
-        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+        <h2 className="text-lg font-semibold text-[#0f172a]">Packing and tasks</h2>
+        <p className="mt-1 text-sm text-slate-600">
           Progress:{" "}
           <strong>
             {progress.done}/{progress.total}
           </strong>{" "}
           completed
         </p>
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
+        <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
           <div
-            className="h-full bg-emerald-500 transition-[width]"
+            className="h-full bg-emerald-800 transition-[width]"
             style={{
               width:
                 progress.total === 0
@@ -144,12 +142,15 @@ export function TripChecklistPanel({
       </div>
 
       {!closed && user ? (
-        <form onSubmit={addItem} className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <form
+          onSubmit={addItem}
+          className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white/95 p-4 ring-1 ring-black/5"
+        >
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="Add an item…"
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-950"
+            className="rounded-lg border border-slate-300/80 bg-white px-3 py-2 text-sm text-[#0f172a] shadow-sm ring-1 ring-black/5"
           />
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-xs">
@@ -157,7 +158,7 @@ export function TripChecklistPanel({
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="rounded-lg border border-zinc-300 px-2 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-950"
+                className="rounded-lg border border-slate-300/80 bg-white px-2 py-2 text-sm text-[#0f172a] shadow-sm ring-1 ring-black/5"
               >
                 {CHECKLIST_CATEGORIES.map((c) => (
                   <option key={c} value={c}>
@@ -171,7 +172,7 @@ export function TripChecklistPanel({
               <select
                 value={assignedTo}
                 onChange={(e) => setAssignedTo(e.target.value)}
-                className="rounded-lg border border-zinc-300 px-2 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-950"
+                className="rounded-lg border border-slate-300/80 bg-white px-2 py-2 text-sm text-[#0f172a] shadow-sm ring-1 ring-black/5"
               >
                 <option value="">Anyone</option>
                 {members.map((m) => (
@@ -185,7 +186,7 @@ export function TripChecklistPanel({
           <button
             type="submit"
             disabled={saving}
-            className="w-fit rounded-full bg-zinc-900 px-4 py-2 text-sm font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900"
+            className="w-fit rounded-2xl bg-[#0f172a] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
           >
             {saving ? "Adding…" : "Add item"}
           </button>
@@ -196,7 +197,7 @@ export function TripChecklistPanel({
         {items.map((item) => (
           <li
             key={item.id}
-            className="flex flex-wrap items-start gap-3 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900"
+            className="flex flex-wrap items-start gap-3 rounded-xl border border-slate-200 bg-white/95 p-3 ring-1 ring-black/5"
           >
             <input
               type="checkbox"
@@ -209,13 +210,13 @@ export function TripChecklistPanel({
               <p
                 className={`text-sm ${
                   item.isCompleted
-                    ? "text-zinc-500 line-through"
-                    : "text-zinc-900 dark:text-zinc-100"
+                    ? "text-slate-500 line-through"
+                    : "text-[#0f172a]"
                 }`}
               >
                 {item.text}
               </p>
-              <p className="mt-1 text-xs text-zinc-500">
+              <p className="mt-1 text-xs text-slate-500">
                 {item.category}
                 {item.assignedTo ? ` · ${memberName(item.assignedTo)}` : ""}
               </p>
@@ -224,7 +225,7 @@ export function TripChecklistPanel({
                   <select
                     value={item.assignedTo ?? ""}
                     onChange={(e) => updateAssign(item, e.target.value)}
-                    className="rounded border border-zinc-200 bg-transparent px-2 py-1 text-xs dark:border-zinc-700"
+                    className="rounded border border-slate-200 bg-white px-2 py-1 text-xs text-[#0f172a]"
                   >
                     <option value="">Anyone</option>
                     {members.map((m) => (
@@ -247,7 +248,7 @@ export function TripChecklistPanel({
         ))}
       </ul>
       {items.length === 0 ? (
-        <p className="text-sm text-zinc-500">No checklist items yet.</p>
+        <p className="text-sm text-slate-500">No checklist items yet.</p>
       ) : null}
     </div>
   );

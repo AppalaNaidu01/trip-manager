@@ -18,6 +18,11 @@ export interface Trip {
   closed?: boolean;
   coverImageUrl?: string | null;
   backgroundImageUrl?: string | null;
+  /** Google Drive folder for trip media (created on first upload) */
+  driveFolderId?: string | null;
+  driveFolderWebViewLink?: string | null;
+  coverDriveFileId?: string | null;
+  backgroundDriveFileId?: string | null;
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -91,6 +96,8 @@ export interface MediaItem {
   id: string;
   tripId: string;
   url: string;
+  /** Set when file is stored in Google Drive */
+  driveFileId?: string | null;
   uploadedBy: string;
   createdAt: Timestamp;
 }
