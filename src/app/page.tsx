@@ -19,8 +19,8 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-dvh w-full bg-[#F9F9F7] pb-12 text-slate-900">
-      <div className="mx-auto w-full max-w-lg px-4 pb-4 pt-2">
+    <div className="min-h-dvh w-full min-w-0 bg-[#F9F9F7] pb-12 text-slate-900">
+      <div className="mx-auto w-full min-w-0 max-w-lg px-4 pb-4 pt-2">
         <LandingHeader user={user} />
         <LandingHero onExploreTrips={onExploreTrips} />
         <LandingFeaturesBento />

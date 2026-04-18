@@ -41,6 +41,10 @@ import {
 } from "@/lib/google-drive/drive-api";
 import { getGoogleDriveAccessToken } from "@/lib/google-drive/token";
 import { uploadTripImageToDrive } from "@/lib/google-drive/media-upload";
+import {
+  ROUTE_SEGMENT_LEGACY_KEY,
+} from "@/lib/route-segments";
+import { useTripRoute } from "@/hooks/useTripRoute";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -81,6 +85,10 @@ export function TripDetail() {
 
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const [photosSegmentFilter, setPhotosSegmentFilter] = useState<string | null>(
+    null,
+  );
+  const { route: tripRoute } = useTripRoute(tripId);
 
   const [copied, setCopied] = useState(false);
   const [tripBroadcast, setTripBroadcast] = useState<{
@@ -93,6 +101,10 @@ export function TripDetail() {
   const triggerPhotoUpload = useCallback(() => {
     photoFileInputRef.current?.click();
   }, []);
+
+  useEffect(() => {
+    if (tab !== "photos") setPhotosSegmentFilter(null);
+  }, [tab]);
 
   const inviteUrl = useMemo(() => {
     if (typeof window === "undefined" || !trip) return "";
@@ -238,6 +250,10 @@ export function TripDetail() {
       return;
     }
     const subtitle = formatTripDateHeroPill(trip);
+    const joinInviteUrl =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/join/${trip.inviteToken}`
+        : "";
     setChrome({
       title: tab === "members" ? "Trip Members" : trip.name,
       subtitle: tab === "members" ? "" : subtitle || "",
@@ -247,6 +263,7 @@ export function TripDetail() {
           : tab === "members" && user
             ? "invitePeople"
             : "menu",
+      inviteUrl: joinInviteUrl,
       onCamera: triggerPhotoUpload,
       onInvitePeople: copyInvite,
     });
@@ -357,7 +374,7 @@ export function TripDetail() {
     [members],
   );
 
-  async function onPickFile(f: FileList | null) {
+  async function onPickFile(f: FileList | null, routeSegmentId: string) {
     if (!user || !trip || trip.closed || !f?.length) return;
     const file = f[0];
     if (!file.type.startsWith("image/")) {
@@ -378,11 +395,16 @@ export function TripDetail() {
         memberEmails,
       });
       const batch = writeBatch(db);
+      const segPayload =
+        routeSegmentId === ROUTE_SEGMENT_LEGACY_KEY
+          ? {}
+          : { routeSegmentId };
       batch.set(mediaRef, {
         url,
         driveFileId,
         uploadedBy: user.uid,
         createdAt: serverTimestamp(),
+        ...segPayload,
       });
       batch.set(
         doc(db, "trips", tripId, "timelineEvents", `media_${mediaId}`),
@@ -447,8 +469,8 @@ export function TripDetail() {
   const hasCover = Boolean(coverSrc);
 
   return (
-    <div className="relative flex flex-col gap-6 overflow-hidden rounded-2xl sm:gap-8">
-      <div className="relative z-10 flex flex-col gap-6 sm:gap-8">
+    <div className="relative flex min-w-0 flex-col gap-6 rounded-2xl sm:gap-8">
+      <div className="relative z-10 flex min-w-0 flex-col gap-6 sm:gap-8">
         <div
           className={`relative mt-1 overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-sm ring-1 ring-black/5 ${
             (tab === "photos" ||
@@ -652,7 +674,7 @@ export function TripDetail() {
               </ul>
             </section>
 
-            <section>
+            <section className="min-w-0 pl-1">
               <div className="flex items-end justify-between gap-2">
                 <h2 className="text-xl font-semibold text-[#0f172a]">
                   Timeline
@@ -739,12 +761,15 @@ export function TripDetail() {
       {tab === "photos" ? (
         <TripPhotosPanel
           trip={trip}
+          route={tripRoute}
           media={media}
           user={user}
           closed={trip.closed === true}
           uploading={uploading}
           uploadErr={uploadErr}
           fileInputRef={photoFileInputRef}
+          photosSegmentFilter={photosSegmentFilter}
+          onPhotosSegmentFilterChange={setPhotosSegmentFilter}
           onPickFile={onPickFile}
           onRemoveMedia={removeMedia}
         />
@@ -755,8 +780,16 @@ export function TripDetail() {
           tripId={tripId}
           trip={trip}
           user={user}
+          media={media}
           photoCount={media.length}
-          onOpenPhotos={() => setTab("photos")}
+          onOpenPhotos={() => {
+            setPhotosSegmentFilter(null);
+            setTab("photos");
+          }}
+          onOpenPhotosForSegment={(segmentId) => {
+            setPhotosSegmentFilter(segmentId);
+            setTab("photos");
+          }}
         />
       ) : null}
 

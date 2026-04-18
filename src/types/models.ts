@@ -104,6 +104,8 @@ export interface MediaItem {
   url: string;
   /** Set when file is stored in Google Drive */
   driveFileId?: string | null;
+  /** Checkpoint on the saved route (start / stop-N / destination); omit for older uploads */
+  routeSegmentId?: string | null;
   uploadedBy: string;
   createdAt: Timestamp;
 }

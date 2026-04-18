@@ -14,6 +14,8 @@ export type TripChromeState = {
   subtitle: string;
   /** Trip detail header: menu, camera (Photos), or invite (Members). */
   headerRight?: "menu" | "camera" | "invitePeople";
+  /** Join link for this trip (`/join/{token}`); used by Share invite in the menu. */
+  inviteUrl?: string;
   onCamera?: () => void;
   /** Copy invite link / focus invite (Members tab). */
   onInvitePeople?: () => void;

@@ -2,7 +2,13 @@
 
 import { mapTripRoute } from "@/lib/firestore-map";
 import { getDb } from "@/lib/firebase/client";
-import type { RouteStop, Trip, TripRoute } from "@/types/models";
+import {
+  mediaGroupKey,
+  ROUTE_SEGMENT_DESTINATION,
+  ROUTE_SEGMENT_START,
+  routeStopSegmentId,
+} from "@/lib/route-segments";
+import type { MediaItem, RouteStop, Trip, TripRoute } from "@/types/models";
 import type { User } from "firebase/auth";
 import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
@@ -30,6 +36,30 @@ function pinPositions(count: number): { left: string; top: string }[] {
   });
 }
 
+function countForSegment(media: MediaItem[], segmentId: string): number {
+  return media.filter((m) => mediaGroupKey(m.routeSegmentId) === segmentId).length;
+}
+
+function SegmentPhotosCue({
+  count,
+  onView,
+}: {
+  count: number;
+  onView: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onView}
+      className="mt-3 w-full rounded-xl border border-[#14532d]/25 bg-emerald-50/60 py-2.5 text-xs font-semibold text-[#14532d] transition hover:bg-emerald-50"
+    >
+      {count === 0
+        ? "Open Photos (none for this stop yet)"
+        : `Open Photos (${count})`}
+    </button>
+  );
+}
+
 function MapPin({
   children,
   className,
@@ -53,15 +83,20 @@ export function TripRoutePanel({
   tripId,
   trip,
   user,
+  media = [],
   photoCount = 0,
   onOpenPhotos,
+  onOpenPhotosForSegment,
 }: {
   tripId: string;
   trip: Trip;
   user: User | null;
-  /** Shown on the journey map card (trip media count). */
+  media?: MediaItem[];
+  /** Trip media count & Photos tab opener (read-only route view). */
   photoCount?: number;
   onOpenPhotos?: () => void;
+  /** Switches to Photos and filters to this checkpoint. */
+  onOpenPhotosForSegment?: (segmentId: string) => void;
 }) {
   const [route, setRoute] = useState<TripRoute | null>(null);
   const [loading, setLoading] = useState(true);
@@ -232,38 +267,6 @@ export function TripRoutePanel({
               );
             })}
           </div>
-          <div className="pointer-events-none absolute inset-x-3 bottom-3 rounded-2xl bg-white/95 p-3 shadow-lg shadow-slate-900/10 ring-1 ring-black/5 backdrop-blur-sm">
-            <div className="pointer-events-auto flex items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-[#14532d]">
-                <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-                  <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
-                  <line x1="8" y1="2" x2="8" y2="18" />
-                  <line x1="16" y1="6" x2="16" y2="22" />
-                </svg>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-[#0f172a]">Journey Map</p>
-                <p className="text-xs text-slate-500">
-                  Tap checkpoints to view photos.
-                </p>
-                <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">
-                  {photoCount} photos
-                </span>
-              </div>
-              {onOpenPhotos ? (
-                <button
-                  type="button"
-                  onClick={onOpenPhotos}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#14532d] text-white shadow-md transition hover:brightness-110"
-                  aria-label="Open photos"
-                >
-                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
-                </button>
-              ) : null}
-            </div>
-          </div>
         </div>
       </section>
 
@@ -294,6 +297,12 @@ export function TripRoutePanel({
                   {startParts.sub ? (
                     <p className="mt-1 text-xs text-slate-500">{startParts.sub}</p>
                   ) : null}
+                  {onOpenPhotosForSegment ? (
+                    <SegmentPhotosCue
+                      count={countForSegment(media, ROUTE_SEGMENT_START)}
+                      onView={() => onOpenPhotosForSegment(ROUTE_SEGMENT_START)}
+                    />
+                  ) : null}
                 </div>
               </div>
 
@@ -319,6 +328,14 @@ export function TripRoutePanel({
                       placeholder="Notes (optional)"
                       className={`${field} mt-2`}
                     />
+                    {onOpenPhotosForSegment ? (
+                      <SegmentPhotosCue
+                        count={countForSegment(media, routeStopSegmentId(i))}
+                        onView={() =>
+                          onOpenPhotosForSegment(routeStopSegmentId(i))
+                        }
+                      />
+                    ) : null}
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <button
                         type="button"
@@ -387,6 +404,14 @@ export function TripRoutePanel({
                   </label>
                   {destParts.sub ? (
                     <p className="mt-1 text-xs text-slate-500">{destParts.sub}</p>
+                  ) : null}
+                  {onOpenPhotosForSegment ? (
+                    <SegmentPhotosCue
+                      count={countForSegment(media, ROUTE_SEGMENT_DESTINATION)}
+                      onView={() =>
+                        onOpenPhotosForSegment(ROUTE_SEGMENT_DESTINATION)
+                      }
+                    />
                   ) : null}
                 </div>
               </div>
@@ -475,8 +500,10 @@ export function TripRoutePanel({
         <RouteReadOnly
           route={route}
           stops={displayStops}
+          media={media}
           photoCount={photoCount}
           onOpenPhotos={onOpenPhotos}
+          onOpenPhotosForSegment={onOpenPhotosForSegment}
         />
       )}
     </div>
@@ -486,13 +513,17 @@ export function TripRoutePanel({
 function RouteReadOnly({
   route,
   stops,
+  media,
   photoCount,
   onOpenPhotos,
+  onOpenPhotosForSegment,
 }: {
   route: TripRoute | null;
   stops: RouteStop[];
+  media: MediaItem[];
   photoCount: number;
   onOpenPhotos?: () => void;
+  onOpenPhotosForSegment?: (segmentId: string) => void;
 }) {
   const startParts = splitLocation(route?.startLocation ?? "");
   const destParts = splitLocation(route?.destination ?? "");
@@ -527,6 +558,12 @@ function RouteReadOnly({
                 {startParts.sub ? (
                   <p className="mt-0.5 text-sm text-slate-500">{startParts.sub}</p>
                 ) : null}
+                {onOpenPhotosForSegment ? (
+                  <SegmentPhotosCue
+                    count={countForSegment(media, ROUTE_SEGMENT_START)}
+                    onView={() => onOpenPhotosForSegment(ROUTE_SEGMENT_START)}
+                  />
+                ) : null}
               </div>
             </div>
 
@@ -539,6 +576,14 @@ function RouteReadOnly({
                   <p className="font-semibold text-[#0f172a]">{stop.name || "—"}</p>
                   {stop.notes ? (
                     <p className="mt-1 text-sm text-slate-600">{stop.notes}</p>
+                  ) : null}
+                  {onOpenPhotosForSegment ? (
+                    <SegmentPhotosCue
+                      count={countForSegment(media, routeStopSegmentId(i))}
+                      onView={() =>
+                        onOpenPhotosForSegment(routeStopSegmentId(i))
+                      }
+                    />
                   ) : null}
                 </div>
               </div>
@@ -559,6 +604,14 @@ function RouteReadOnly({
                 </p>
                 {destParts.sub ? (
                   <p className="mt-0.5 text-sm text-slate-500">{destParts.sub}</p>
+                ) : null}
+                {onOpenPhotosForSegment ? (
+                  <SegmentPhotosCue
+                    count={countForSegment(media, ROUTE_SEGMENT_DESTINATION)}
+                    onView={() =>
+                      onOpenPhotosForSegment(ROUTE_SEGMENT_DESTINATION)
+                    }
+                  />
                 ) : null}
               </div>
             </div>

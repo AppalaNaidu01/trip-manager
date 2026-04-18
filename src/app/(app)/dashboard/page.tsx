@@ -273,7 +273,7 @@ export default function DashboardPage() {
   }, [filtered]);
 
   return (
-    <div className="flex w-full flex-col">
+    <div className="flex w-full min-w-0 flex-col">
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
           My Trips

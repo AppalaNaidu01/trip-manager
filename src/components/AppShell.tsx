@@ -110,8 +110,11 @@ function TripOverviewBar() {
   const showCamera = chrome?.headerRight === "camera";
   const showInvitePeople = chrome?.headerRight === "invitePeople";
   async function share() {
-    const url =
+    const invite = chrome?.inviteUrl?.trim();
+    const fallback =
       typeof window !== "undefined" ? window.location.href : "";
+    const url =
+      invite && invite.length > 0 ? invite : fallback;
     if (!url) return;
     try {
       if (navigator.share) {
@@ -197,7 +200,7 @@ function TripOverviewBar() {
                       className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-medium text-slate-800 hover:bg-slate-50"
                     >
                       <ShareIcon className="h-4 w-4 shrink-0 opacity-70" />
-                      {hint ? "Link copied" : "Share trip"}
+                      {hint ? "Invite link copied" : "Share invite"}
                     </button>
                   </div>
                 </>
@@ -366,7 +369,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </>
         ) : null}
 
-        <div className="mx-auto w-full max-w-lg flex-1 px-4 pb-10 pt-4">
+        <div className="mx-auto w-full min-w-0 max-w-lg flex-1 px-4 pb-10 pt-4">
           {children}
         </div>
       </div>
@@ -377,7 +380,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return (
       <div className="flex min-h-dvh w-full flex-1 flex-col bg-[#F9F9F7] text-[#0f172a]">
         <TripOverviewBar />
-        <div className="mx-auto w-full max-w-lg flex-1 px-4 pb-12 pt-2">
+        <div className="mx-auto w-full min-w-0 max-w-lg flex-1 px-4 pb-12 pt-2">
           {children}
         </div>
       </div>
@@ -437,7 +440,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-lg flex-1 px-4 py-6">{children}</div>
+      <div className="mx-auto w-full min-w-0 max-w-lg flex-1 px-4 py-6">
+        {children}
+      </div>
     </div>
   );
 }

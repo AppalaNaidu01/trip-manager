@@ -14,7 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="min-h-dvh antialiased">
-      <body className="flex min-h-dvh flex-col font-sans">
+      <body className="flex min-h-dvh min-w-0 flex-col font-sans">
         <Providers>{children}</Providers>
       </body>
     </html>

@@ -25,7 +25,7 @@ export function TripTabNav({
   onChange: (id: TripTabId) => void;
 }) {
   return (
-    <div className="scrollbar-hide -mx-1 flex gap-5 overflow-x-auto border-b border-slate-200/90 pb-0">
+    <div className="scrollbar-hide flex gap-5 overflow-x-auto border-b border-slate-200/90 pb-0">
       {TABS.map((t) => (
         <button
           key={t.id}

@@ -89,12 +89,15 @@ export function mapMedia(
   tripId: string,
   data: DocumentData,
 ): MediaItem {
+  const rawSeg = data.routeSegmentId;
   return {
     id,
     tripId,
     url: String(data.url ?? ""),
     driveFileId:
       data.driveFileId != null ? String(data.driveFileId) : null,
+    routeSegmentId:
+      rawSeg != null && String(rawSeg).length > 0 ? String(rawSeg) : null,
     uploadedBy: String(data.uploadedBy ?? ""),
     createdAt: data.createdAt,
   };
