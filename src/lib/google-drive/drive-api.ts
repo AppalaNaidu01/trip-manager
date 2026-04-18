@@ -120,52 +120,73 @@ export type UploadedFile = {
   thumbnailLink?: string;
 };
 
+async function uploadMultipart(
+  accessToken: string,
+  metadata: Record<string, unknown>,
+  file: File,
+): Promise<Response> {
+  const boundary = `trip_boundary_${Date.now()}`;
+  const metaPart = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`;
+  const filePart = `--${boundary}\r\nContent-Type: ${file.type || "application/octet-stream"}\r\n\r\n`;
+  const end = `\r\n--${boundary}--`;
+  const fileBuf = await file.arrayBuffer();
+  const blob = new Blob([metaPart, filePart, fileBuf, end], {
+    type: `multipart/related; boundary=${boundary}`,
+  });
+  return driveFetch(
+    `${UPLOAD_BASE}/files?uploadType=multipart&fields=id,webViewLink,thumbnailLink`,
+    {
+      method: "POST",
+      accessToken,
+      headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+      body: blob,
+    },
+  );
+}
+
 export async function uploadImageToFolder(
   accessToken: string,
   parentFolderId: string,
   file: File,
   nameHint: string,
 ): Promise<UploadedFile> {
-  const boundary = `trip_boundary_${Date.now()}`;
   const safeName =
     nameHint.replace(/[^\w.\- ]+/g, "_").slice(0, 120) ||
     `upload_${Date.now()}.jpg`;
 
-  const metadata = {
-    name: safeName,
-    parents: [parentFolderId],
-  };
+  // First attempt: upload directly into the trip folder.
+  let res = await uploadMultipart(accessToken, { name: safeName, parents: [parentFolderId] }, file);
 
-  const metaPart = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`;
-  const filePart = `--${boundary}\r\nContent-Type: ${file.type || "application/octet-stream"}\r\n\r\n`;
-  const end = `\r\n--${boundary}--`;
-
-  const fileBuf = await file.arrayBuffer();
-  const blob = new Blob([metaPart, filePart, fileBuf, end], {
-    type: `multipart/related; boundary=${boundary}`,
-  });
-
-  const res = await driveFetch(
-    `${UPLOAD_BASE}/files?uploadType=multipart&fields=id,webViewLink,thumbnailLink`,
-    {
-      method: "POST",
-      accessToken,
-      headers: {
-        "Content-Type": `multipart/related; boundary=${boundary}`,
-      },
-      body: blob,
-    },
-  );
+  // 403 "Insufficient permissions for the specified parent" means the current
+  // user's drive.file token can't write into a folder created by another user.
+  // Fall back to uploading to Drive root (always allowed with drive.file scope)
+  // and then move the file into the folder via the update API.
+  if (res.status === 403) {
+    res = await uploadMultipart(accessToken, { name: safeName }, file);
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Drive: upload failed (${res.status}). ${err.slice(0, 200)}`);
+    }
+    const created = (await res.json()) as UploadedFile;
+    // Move the file into the trip folder (add parent, remove root parent).
+    const moveRes = await driveFetch(
+      `${DRIVE_BASE}/files/${encodeURIComponent(created.id)}?addParents=${encodeURIComponent(parentFolderId)}&removeParents=root&fields=id,webViewLink,thumbnailLink`,
+      { method: "PATCH", accessToken, headers: { "Content-Type": "application/json" }, body: "{}" },
+    );
+    if (!moveRes.ok && moveRes.status !== 403) {
+      // Move failed for a non-permissions reason — not fatal, file is still accessible.
+      console.warn(`Drive: could not move file into trip folder (${moveRes.status})`);
+    }
+    await setAnyoneReader(accessToken, created.id);
+    return moveRes.ok ? ((await moveRes.json()) as UploadedFile) : created;
+  }
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(
-      `Drive: upload failed (${res.status}). ${err.slice(0, 200)}`,
-    );
+    throw new Error(`Drive: upload failed (${res.status}). ${err.slice(0, 200)}`);
   }
 
   const created = (await res.json()) as UploadedFile;
-  /** Folder sharing does not always make new files web-visible; grant link access on the file. */
   await setAnyoneReader(accessToken, created.id);
   return created;
 }

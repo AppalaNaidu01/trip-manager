@@ -5,7 +5,6 @@ import {
   signInWithPopup,
   signInWithRedirect,
 } from "firebase/auth";
-import { prefersAuthRedirect } from "@/lib/auth-utils";
 import { getFirebaseAuth } from "@/lib/firebase/client";
 import { DRIVE_FILE_SCOPE } from "./constants";
 
@@ -84,13 +83,6 @@ export async function getGoogleDriveAccessToken(
   const auth = getFirebaseAuth();
   const provider = new GoogleAuthProvider();
   provider.addScope(DRIVE_FILE_SCOPE);
-
-  if (prefersAuthRedirect()) {
-    await signInWithRedirect(auth, provider);
-    throw new Error(
-      "Redirecting to Google for Drive access. Continue here after signing in.",
-    );
-  }
 
   try {
     const result = await signInWithPopup(auth, provider);

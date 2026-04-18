@@ -17,7 +17,6 @@ import {
   signOut,
   type User,
 } from "firebase/auth";
-import { prefersAuthRedirect } from "@/lib/auth-utils";
 import { getFirebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase/client";
 import {
   clearDriveTokenCache,
@@ -42,17 +41,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (configError) return;
     const auth = getFirebaseAuth();
+
+    // Subscribe to auth state first — this fires immediately with the persisted
+    // session (or null) and is the source of truth for user state.
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setPending(false);
     });
-    return () => unsub();
-  }, [configError]);
 
-  /** Complete Google redirect sign-in (mobile / popup-blocked) and prime Drive OAuth token. */
-  useEffect(() => {
-    if (configError) return;
-    const auth = getFirebaseAuth();
+    // Check for a pending redirect result (mobile / popup-blocked sign-in or
+    // Drive re-auth redirect). Always capture the access token so Drive uploads
+    // work after redirect-based sign-in without a second consent popup.
     void getRedirectResult(auth)
       .then((result) => {
         if (!result) return;
@@ -64,6 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch((err) => {
         console.error("getRedirectResult:", err);
       });
+
+    return () => unsub();
   }, [configError]);
 
   const loading = pending;
@@ -76,10 +77,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signInWithGoogle: async () => {
         if (configError) return;
         const auth = getFirebaseAuth();
-        if (prefersAuthRedirect()) {
-          await signInWithRedirect(auth, googleProvider);
-          return;
-        }
         try {
           const result = await signInWithPopup(auth, googleProvider);
           const cred = GoogleAuthProvider.credentialFromResult(result);
